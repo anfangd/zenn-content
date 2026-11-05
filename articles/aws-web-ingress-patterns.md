@@ -46,9 +46,9 @@ published: false
 
 - [Restrict access to Application Load Balancers - Amazon CloudFront](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/restrict-access-to-load-balancer.html)
 
-### CT Log（Certificate Transparency）とは
+### CT Log（Certificate Transparency：証明書の透明性）とは
 
-CT は、公的な CA が発行した TLS 証明書を、**誰でも監査できる追記専用のログ**に記録する仕組みです。誤発行や不正発行の証明書を検知することが目的で、RFC 6962 で定義されています（後継は RFC 9162）。
+CT（Certificate Transparency：証明書の透明性）は、公的な CA（Certificate Authority：認証局。証明書を発行する機関）が発行した TLS 証明書を、**誰でも監査できる追記専用のログ**に記録する仕組みです。誤発行や不正発行の証明書を検知することが目的で、RFC 6962 で定義されています（後継は RFC 9162）。
 
 - [RFC 6962: Certificate Transparency](https://www.rfc-editor.org/rfc/rfc6962)
 
@@ -81,6 +81,16 @@ ACM の公開証明書は、自動的に CT ログに記録されます。ブラ
 
 ### CA と CT の仕組み（図解）
 
+:::message
+**用語**
+- **CA**（Certificate Authority）：認証局。TLS 証明書を発行する機関。ACM の裏側では Amazon Trust Services が CA です
+- **CT**（Certificate Transparency）：証明書の透明性。発行された証明書をすべて公開ログに記録する仕組み
+- **SCT**（Signed Certificate Timestamp）：CT ログへの登録の受領証。「一定時間内に必ず公開する」というログの署名付きの約束
+- **STH**（Signed Tree Head）：ログ全体（マークル木の根）のハッシュに対するログの署名
+- **DV**（Domain Validation）：ドメイン検証。申請者がドメインを管理しているかの確認
+- **SAN**（Subject Alternative Name）：証明書に書かれた、その証明書が有効なホスト名
+:::
+
 CT Log の話は、「構成（誰が何を持っているか）」と「フロー（いつ何が流れるか）」を分けると理解しやすくなります。フローはさらに、**発行（1回だけ）**、**検証（TLS 接続のたび）**、**監視（常時）** の 3 つに分かれていて、それぞれ登場人物が違います。
 
 #### 構成図
@@ -89,7 +99,7 @@ CT Log の話は、「構成（誰が何を持っているか）」と「フロ�
 
 - ブラウザや OS は、信頼する**ルートストア**と、**既知の CT ログ一覧**（各ログの公開鍵）を、あらかじめ持っています
 - CA は、オフラインで保管するルート CA の下に**中間 CA** を置き、日々の証明書は中間 CA が署名します
-- CT ログは複数の事業者が運営する追記専用のマークル木で、木の根（STH）に署名して公開します
+- CT ログは複数の事業者が運営する追記専用のマークル木で、木の根への署名（STH）を公開します
 - ルートストアに入っている CA なら、どのドメインの証明書でも発行できてしまいます。その発行をすべて公開して監視できるようにしたのが CT です
 
 #### 発行フロー（証明書を作るとき）
@@ -111,7 +121,7 @@ CT Log の話は、「構成（誰が何を持っているか）」と「フロ�
 登場人物はブラウザとサーバーだけで、**CA にも CT ログにも問い合わせません**。ブラウザは、手元のルートストアと既知ログ一覧を使って、次の点を確認します。
 
 - チェーン：署名をたどってルートストアのルート CA に行き着くか
-- 有効期限とホスト名（SAN）
+- 有効期限とホスト名（SAN：証明書に書かれたホスト名）
 - 失効していないか
 - SCT：ログの署名が正しいか。数と運営者の多様性がポリシーを満たすか
 
