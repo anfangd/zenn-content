@@ -47,13 +47,36 @@ published: false
 
 ### CT Log（Certificate Transparency）とは
 
-公的な CA が発行した TLS 証明書を、すべて公開の追記専用ログに記録する仕組みです。Chrome や Safari は CT Log に載っていない証明書を信頼しないため、ACM で発行した証明書も含めて実質すべて記録されます。
+CT は、公的な CA が発行した TLS 証明書を、**誰でも監査できる追記専用のログ**に記録する仕組みです。誤発行や不正発行の証明書を検知することが目的で、RFC 6962 で定義されています（後継は RFC 9162）。
 
-`crt.sh` などで検索すれば、`origin.example.com` や `stg-admin.example.com` のように、証明書を取ったホスト名が一覧で分かります。攻撃者はこれを偵察に使います。証明書を発行した直後にスキャンが来るのはよくある話です。
+- [RFC 6962: Certificate Transparency](https://www.rfc-editor.org/rfc/rfc6962)
 
-**DNS を公開していなくても、証明書を取った時点でホスト名は知られる** と考えておきましょう。
+ポイントは次の 3 つです。
 
-ワイルドカード証明書を使えば個別のホスト名は隠せます。ただし、これは隠蔽による対策にすぎません。本筋は「名前を知られても届かない」構成にすることです。
+**1. ブラウザが CT を必須にしている**
+
+Chrome と Apple のプラットフォーム（Safari を含む）は、CT のポリシーを満たさない公的な証明書を信頼しません。証明書には、CT ログに登録した証拠である SCT（Signed Certificate Timestamp）が複数必要です。
+
+- [Chrome Certificate Transparency Policy](https://googlechrome.github.io/CertificateTransparency/ct_policy.html)
+- [Apple's Certificate Transparency policy](https://support.apple.com/en-us/103214)
+
+**2. ACM の公開証明書も必ず記録され、オプトアウトできない**
+
+ACM の公開証明書は、自動的に CT ログに記録されます。ブラウザのポリシー上の要件なので、オプトアウトはできません。以前あった `CertificateTransparencyLoggingPreference` は非推奨になっています。記録されるのは**ドメイン名**で、秘密鍵は記録されません。
+
+- [AWS Certificate Manager concepts - Certificate Transparency Logging](https://docs.aws.amazon.com/acm/latest/userguide/acm-concepts.html)
+
+**3. ログは誰でも検索でき、攻撃者の偵察にも使われる**
+
+`crt.sh` などの検索サービスを使えば、`origin.example.com` や `stg-admin.example.com` のように、証明書を取ったホスト名を誰でも一覧できます。本来は、自ドメインで身に覚えのない証明書が発行されていないかを監視するための仕組みです（ACM のドキュメントでも、この用途でログの監視を勧めています）。
+
+一方で攻撃者もこれを偵察に使います。IMC 2018 の論文では、CT ログを監視するハニーポットを置いたところ、**証明書の発行から数分でスキャンの標的にされた**ことが観測されています。
+
+- [The Rise of Certificate Transparency and Its Implications on the Internet Ecosystem (IMC 2018)](https://arxiv.org/abs/1809.08325)
+
+つまり、**DNS を公開していなくても、公的な証明書を取った時点でホスト名は知られる** と考えておく必要があります。冒頭の投稿にあった「Host ヘッダー付きの攻撃が増えた」という話は、このことを指しています。
+
+対策としては、オリジン用の証明書をワイルドカード（`*.example.com`）にすれば、ログに載るのは `*.example.com` だけになり、個別のホスト名は出ません。ただし、これはホスト名を推測しにくくするだけの隠蔽策です。本筋は「名前を知られても届かない」構成にすることです。
 
 ## 選定フロー
 
