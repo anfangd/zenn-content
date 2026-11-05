@@ -34,6 +34,7 @@ published: false
 - **プレフィックスリストだけでは不十分**です。他人の CloudFront も同じ IP 帯から来るため、本体は秘密ヘッダーの照合です
 - **CT Log** にはオリジン用に取った証明書のホスト名が載るので、「ホスト名は知られる前提」で設計します
 - 新規構築なら **VPC オリジン＋`CloudFront-VPCOrigins-Service-SG` 限定** が第一候補です。名前を知られても、そもそも到達できません
+- **WAF は「中身を検査する層」、VPC オリジン / OAC / SG は「届く経路を絞る層」** です。役割が違うので両方必要で、WAF の主戦場はエッジ（CloudFront）です
 
 ## 前提知識
 
@@ -79,6 +80,120 @@ ACM の公開証明書は、自動的に CT ログに記録されます。ブラ
 対策としては、オリジン用の証明書をワイルドカード（`*.example.com`）にすれば、ログに載るのは `*.example.com` だけになり、個別のホスト名は出ません。ただし、これはホスト名を推測しにくくするだけの隠蔽策です。本筋は「名前を知られても届かない」構成にすることです。
 
 CA と CT がどうつながっているか（構成・発行・検証・監視）は、記事末尾の「付録：CA と CT の仕組み」に図でまとめています。
+
+## WAF の位置付けと組み合わせ方
+
+ここまでの話は「誰がオリジンに届くか（経路）」の話でした。WAF は層が違い、「届いたリクエストの中身を検査する」ものです。
+
+![防御レイヤーとWAFの位置付け](/images/aws-web-ingress-patterns/09-defense-layers.drawio.svg)
+
+- **B だけ（WAF だけ）の場合**：オリジンに直接来られると素通りです。冒頭の「第三者の CloudFront 経由で WAF を迂回される」話はこれです
+- **C・D だけ（経路の限定だけ）の場合**：正規の CloudFront を通って来る SQL インジェクションや HTTP flood は止まりません
+- **基本形は B＋C＋D** です。E（リージョンの WAF）は、必要なときに足します
+
+### WAF を付けられる場所・付けられない場所
+
+WAF の web ACL を関連付けられるのは、CloudFront、ALB、API Gateway の REST API、AppSync、Cognito ユーザープール、App Runner、Verified Access、Amplify、Bedrock AgentCore Gateway です。CloudFront 用は **Global スコープ（us-east-1 で作成）**、それ以外は **リソースと同じリージョンの Regional スコープ** になります。CloudFront に関連付けた web ACL は、他の種類のリソースには関連付けられません。
+
+逆に、**NLB、Global Accelerator、S3、Lambda 関数 URL、API Gateway の HTTP API には直接付けられません**。これらを WAF で守るなら、前段に CloudFront を置くか、後段の ALB に付けます。
+
+- [Associating or disassociating protection with an AWS resource - AWS WAF](https://docs.aws.amazon.com/waf/latest/developerguide/web-acl-associating-aws-resource.html)
+
+### エッジ（CloudFront）に置くのが基本
+
+AWS の WAF 実装ガイドラインでは、インターネットに公開する Web アプリケーションには、制約がない限り **CloudFront と組み合わせて WAF を置く** ことを推奨しています。理由は次のとおりです。
+
+- CloudFront の WAF の処理能力は CloudFront の拠点の規模に合わせてスケールし、リージョンの WAF の容量制約を受けません
+- CloudFront 自体が不正な HTTP リクエストや L3/L4 の攻撃を止めるので、WAF はアプリ層の検査に集中できます
+- CloudFront や WAF が拒否したリクエストには、HTTP リクエスト料金やデータ転送料金がかかりません
+
+リージョンの WAF（E）を足すのは、次のような場合です。
+
+- 1 つのドメインの裏に複数のアプリがあり、エッジでは IP・国による共通のブロック、各 ALB ではアプリ固有のルール、と分けたい場合（ガイドラインに例があります）
+- ②（公開 ALB）のように、エッジを通らない経路が論理的に残っている場合の保険
+- ⑦（Global Accelerator）や ⑧（公開 ALB 直受け）のように、そもそも CloudFront がない場合（ALB 側が唯一の WAF になります）
+
+- [Guidelines for Implementing AWS WAF (Whitepaper)](https://docs.aws.amazon.com/whitepapers/latest/guidelines-for-implementing-aws-waf/guidelines-for-implementing-aws-waf.html)
+- [Amazon CloudFront - AWS Best Practices for DDoS Resiliency](https://docs.aws.amazon.com/whitepapers/latest/aws-best-practices-ddos-resiliency/cloudfront.html)
+
+### パターンごとの WAF の置き場所
+
+| パターン | WAF の置き場所 | 補足 |
+|---|---|---|
+| ① VPC オリジン | CloudFront（Global） | 経路が閉じているので ALB 側は基本不要。アプリ固有ルールを分けたいときだけ ALB にも |
+| ② 公開 ALB＋秘密ヘッダー | CloudFront（Global）＋必要に応じて ALB（Regional） | 秘密ヘッダーが漏れたときの保険として ALB 側も検討 |
+| ③ S3（OAC） | CloudFront（Global） | S3 には付けられない |
+| ④ Lambda 関数 URL（OAC） | CloudFront（Global） | 関数 URL には付けられない |
+| ⑤ Regional API Gateway | CloudFront（Global）＋必要に応じて REST API ステージ（Regional） | HTTP API には付けられない |
+| ⑥ Private API | CloudFront（Global） | 経路は①と同じ |
+| ⑦ Global Accelerator | ALB（Regional） | GA には付けられない。クライアント IP が保持されるので、IP ベースのルールがそのまま効く |
+| ⑧ 公開 ALB 直受け | ALB（Regional）※必須 | 唯一の L7 防御。Shield Advanced も検討 |
+
+### 組み合わせるときの注意点
+
+**1. ALB 側の WAF には、クライアントの IP ではなく CloudFront の IP が見える**
+
+WAF は既定で、リクエストの送信元 IP を使います。プロキシやロードバランサーを経由すると、それは最後のプロキシのアドレスになります。そのため CloudFront の背後にある ALB の WAF で、IP セット、国（geo）、レートベースのルールを使うには、`X-Forwarded-For` などを使う forwarded IP の設定が必要です。
+
+ここで注意したいのが次の 2 点です。
+
+- 指定したヘッダーがリクエストにない場合、WAF は**そのルールをまったく適用しません**
+- WAF は**ヘッダーの先頭の IP** を使います。`X-Forwarded-For` はクライアントが自分で付けて送れるので、先頭は偽装できてしまいます（これは私の補足です）
+
+なお、Bot Control と Anti-DDoS のマネージドルールグループは、CloudFront などの CDN 経由のトラフィックを自動で認識し、元のクライアント IP を使ってくれます。
+
+結論として、**IP ベースのルールはエッジ（CloudFront）の WAF に寄せる** のが安全です。
+
+- [Using forwarded IP addresses in AWS WAF](https://docs.aws.amazon.com/waf/latest/developerguide/waf-rule-statement-forwarded-ip-address.html)
+
+**2. ボディを検査できるサイズが置き場所で違う**
+
+| 置き場所 | ボディの検査上限 |
+|---|---|
+| ALB / AppSync | **8 KB 固定** |
+| CloudFront / API Gateway / Cognito / App Runner / Verified Access | 既定 16 KB、最大 64 KB まで拡張可（追加料金） |
+
+上限を超えた部分は WAF に渡されず、検査されません。また、Core rule set の `SizeRestrictions_BODY` は 8 KB を超えるボディをブロックするので、ファイルアップロードなどの API では誤検知の原因になります。ラベルを使って例外を作りましょう。
+
+- [AWS WAF quotas](https://docs.aws.amazon.com/waf/latest/developerguide/limits.html)
+- [Baseline rule groups - Core rule set](https://docs.aws.amazon.com/waf/latest/developerguide/aws-managed-rule-groups-baseline.html)
+
+**3. WAF が内部エラーになったときの挙動が違う**
+
+WAF の内部エラーで判定が遅れた場合、**CloudFront は通常リクエストを通し、リージョンのサービスは通常拒否します**。エッジの WAF は可用性寄り（fail-open 寄り）、ALB の WAF は fail-closed 寄りです。ALB には `waf.fail_open.enabled`（既定 false）の属性もあります。
+
+- [Configuring protection in AWS WAF](https://docs.aws.amazon.com/waf/latest/developerguide/web-acl.html)
+
+### ルールの組み方
+
+DDoS 耐性のホワイトペーパーは、**早い段階で攻撃を減らす「漏斗型」** の順番を推奨しています。
+
+1. 許可する IP（Allow）
+2. ブロックする IP（Block）
+3. 国による制限（geo）
+4. Anti-DDoS マネージドルール
+5. Amazon IP reputation list
+6. 全体にかけるレートベースルール（高めの閾値）
+7. 用途別のレートベースルール（API・URI・JA3/JA4 など、低めの閾値）
+8. Core rule set
+9. Bot Control
+
+レートベースルールについては、全体に高めの閾値をかけたうえで、キャッシュできない動的なエンドポイントやログインなどの重い処理には、より低い閾値のルールを別に足すのが推奨です。
+
+最初の一歩としては、**ベースラインのルールグループ（Core rule set、Known bad inputs）と Amazon IP reputation list から始め、アプリの特性に合わせて用途別のルールグループを足す** のが勧められています。ALB の WAF 連携で作られる既定の web ACL も、この 3 つの組み合わせです。
+
+- [AWS WAF - AWS Best Practices for DDoS Resiliency](https://docs.aws.amazon.com/whitepapers/latest/aws-best-practices-ddos-resiliency/aws-waf.html)
+- [AWS WAF – Rate-based rules](https://docs.aws.amazon.com/whitepapers/latest/aws-best-practices-ddos-resiliency/aws-waf-rate-based-rules.html)
+- [Integrations for your Application Load Balancer](https://docs.aws.amazon.com/elasticloadbalancing/latest/application/load-balancer-integrations.html)
+
+### 運用
+
+- **Count モードで試してから Block にする**：ステージングで調整したあと、本番トラフィックでも Count モードで影響を確認してから有効化します（[Testing and tuning your AWS WAF protections](https://docs.aws.amazon.com/waf/latest/developerguide/web-acl-testing.html)）
+- **ログを有効にする**：Security Hub の CloudFront.6 / ELB.16 は WAF の関連付けだけを見ます。誤検知の調査にはログが必須です
+- **組織で統一する**：AWS Firewall Manager を使うと、組織全体のアカウントに WAF のポリシーを一括で配布・是正できます
+- **Shield Advanced を使う場合**：レートベースルールを含む web ACL の関連付けが前提です。2026年3月26日から、HTTP flood 対策の既定は Anti-DDoS マネージドルールグループになり、従来の L7 自動緩和機能を置き換えています（[Automating application layer DDoS mitigation](https://docs.aws.amazon.com/waf/latest/developerguide/ddos-automatic-app-layer-response.html)）
+
+---
 
 ## 選定フロー
 
