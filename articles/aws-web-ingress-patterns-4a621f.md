@@ -88,7 +88,7 @@ CT は、公的な CA（Certificate Authority：認証局）が発行した TLS 
 
 CA と CT の仕組み（構成・発行・検証・監視）は、図解付きで別の記事にまとめました。
 
-https://zenn.dev/anfangd/articles/certificate-transparency-ct-log
+https://zenn.dev/anfangd/articles/certificate-transparency-ct-log-4a621f
 
 - [AWS Certificate Manager concepts - Certificate Transparency Logging](https://docs.aws.amazon.com/acm/latest/userguide/acm-concepts.html)
 
