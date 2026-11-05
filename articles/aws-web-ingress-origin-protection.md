@@ -599,3 +599,4 @@ aws cloudfront get-distribution-config --id E123EXAMPLE \
 - CT Log によってホスト名は知られる前提です。**「隠す」より「届かない」構成**を選びましょう
 - 新規構築なら、まず **VPC オリジン（ALB / NLB / EC2）と OAC（S3 / Lambda 関数 URL）** を検討します。fail-closed で決定論的な、運用しやすい構成になります
 - 既存の公開 ALB 構成は、ステージングディストリビューションで検証しながら VPC オリジンへ段階的に移行できます
+
