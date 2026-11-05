@@ -189,7 +189,7 @@ DDoS 耐性のホワイトペーパーは、**早い段階で攻撃を減らす�
 ### 運用
 
 - **Count モードで試してから Block にする**：ステージングで調整したあと、本番トラフィックでも Count モードで影響を確認してから有効化します（[Testing and tuning your AWS WAF protections](https://docs.aws.amazon.com/waf/latest/developerguide/web-acl-testing.html)）
-- **ログを有効にする**：Security Hub の CloudFront.6 / ELB.16 は WAF の関連付けだけを見ます。誤検知の調査にはログが必須です
+- **ログを有効にする**：誤検知の調査や攻撃の分析には WAF のログが欠かせません。サンプリングされたリクエスト（直近 3 時間）だけでは足りないことが多いです
 - **組織で統一する**：AWS Firewall Manager を使うと、組織全体のアカウントに WAF のポリシーを一括で配布・是正できます
 - **Shield Advanced を使う場合**：レートベースルールを含む web ACL の関連付けが前提です。2026年3月26日から、HTTP flood 対策の既定は Anti-DDoS マネージドルールグループになり、従来の L7 自動緩和機能を置き換えています（[Automating application layer DDoS mitigation](https://docs.aws.amazon.com/waf/latest/developerguide/ddos-automatic-app-layer-response.html)）
 
