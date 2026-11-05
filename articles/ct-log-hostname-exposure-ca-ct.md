@@ -16,7 +16,7 @@ published: true
 
 AWS で Web リクエストを受ける構成の話は、別の記事にまとめています。この記事はその前提知識の深掘りです。
 
-https://zenn.dev/anfangd/articles/aws-web-ingress-patterns-4a621f
+https://zenn.dev/anfangd/articles/aws-web-ingress-origin-protection
 
 ## TL;DR
 
@@ -123,7 +123,7 @@ Chrome の場合、有効期間が 180 日以下の証明書では 2 個、そ�
 - **予防**：DNS に CAA レコードを置き、自ドメインの証明書を発行できる CA を限定します（ACM を使うなら Amazon 系の CA を許可します）
 - **検知**：CT ログを監視し、身に覚えのない証明書が発行されていないかを確認します。ACM のドキュメントでも、ログの監視が勧められています
 - **隠蔽（補助）**：オリジン用の証明書をワイルドカード（`*.example.com`）にすれば、ログに載るのは `*.example.com` だけで、個別のホスト名は出ません。ただし推測しにくくするだけです
-- **本筋**：ホスト名は知られる前提で、「名前を知られても届かない」構成にします。AWS なら CloudFront の VPC オリジンや OAC です（詳しくは[こちらの記事](https://zenn.dev/anfangd/articles/aws-web-ingress-patterns-4a621f)）
+- **本筋**：ホスト名は知られる前提で、「名前を知られても届かない」構成にします。AWS なら CloudFront の VPC オリジンや OAC です（詳しくは[こちらの記事](https://zenn.dev/anfangd/articles/aws-web-ingress-origin-protection)）
 
 ## 手を動かして確かめる
 
