@@ -20,9 +20,9 @@ published: true
 
 元の投稿はこちらです。
 
-@[tweet](https://x.com/nasub7373/status/2117957893232451709)
+@[tweet](https://twitter.com/nasub7373/status/2117957893232451709)
 
-@[tweet](https://x.com/___nix___/status/2117996284783300621)
+@[tweet](https://twitter.com/___nix___/status/2117996284783300621)
 
 どちらも重要な指摘です。一方で、2024年11月に **CloudFront VPC オリジン** が登場してから、選べる構成はかなり変わっています。
 
@@ -94,7 +94,7 @@ https://zenn.dev/anfangd/articles/ct-log-hostname-exposure-ca-ct
 
 ## 選定フロー
 
-![選定フロー](/images/aws-web-ingress-patterns/00-decision-flow.drawio.svg)
+![選定フロー](/images/aws-web-ingress-patterns/00-decision-flow.png)
 
 DDoS 耐性のホワイトペーパーでは、CloudFront の背後に VPC 内のオリジンを置く場合、**VPC オリジンが最新かつ推奨の方法** とされています。S3・AWS Elemental・Lambda 関数 URL については、引き続き **OAC が推奨** です。
 
@@ -108,7 +108,7 @@ CloudFront の FAQ でも、マネージドな仕組みで要件を満たせな�
 
 ## ① CloudFront + VPC オリジン（内部 ALB）★第一候補
 
-![VPCオリジン](/images/aws-web-ingress-patterns/01-vpc-origin.drawio.svg)
+![VPCオリジン](/images/aws-web-ingress-patterns/01-vpc-origin.png)
 
 プライベートサブネットにある ALB / NLB / EC2 を、CloudFront のオリジンとして直接使えます。ALB にパブリック IP がないため、**CT Log でホスト名を知られても、Host ヘッダーを付けても、インターネットから届く経路自体がありません**。VPC オリジンの利用に追加料金はかかりません。
 
@@ -213,7 +213,7 @@ curl -s -o /dev/null -w '%{http_code}\n' https://www.example.com/
 
 ## ② CloudFront + 公開 ALB（プレフィックスリスト＋秘密ヘッダー）※フォールバック
 
-![公開ALB＋秘密ヘッダー](/images/aws-web-ingress-patterns/02-public-alb-secret-header.drawio.svg)
+![公開ALB＋秘密ヘッダー](/images/aws-web-ingress-patterns/02-public-alb-secret-header.png)
 
 この構成を選ぶのは、ALB を複数の CDN から使う場合や、VPC オリジンが使えない機能に依存している場合です。冒頭の X の話題はこの構成のことです。
 
@@ -327,7 +327,7 @@ curl -s -o /dev/null -w '%{http_code}\n' https://www.example.com/
 
 ## ③ CloudFront + S3（OAC）
 
-![S3 OAC](/images/aws-web-ingress-patterns/03-s3-oac.drawio.svg)
+![S3 OAC](/images/aws-web-ingress-patterns/03-s3-oac.png)
 
 S3 なら OAC（Origin Access Control）一択です。OAI はレガシー扱いで、次の点に対応していません。
 
@@ -368,7 +368,7 @@ curl -s -o /dev/null -w '%{http_code}\n' https://www.example.com/index.html
 
 ## ④ CloudFront + Lambda 関数 URL（OAC）
 
-![Lambda関数URL OAC](/images/aws-web-ingress-patterns/04-lambda-url-oac.drawio.svg)
+![Lambda関数URL OAC](/images/aws-web-ingress-patterns/04-lambda-url-oac.png)
 
 関数 URL 自体は公開エンドポイントのままです。そのため **OAC を付けないと直接叩けてしまいます**。Security Hub でも CloudFront.16 として検知対象になっています。
 
@@ -402,7 +402,7 @@ curl -s -o /dev/null -w '%{http_code}\n' https://abcdefghij.lambda-url.ap-northe
 
 ## ⑤ 自社の CloudFront + Regional API Gateway（公開 API）
 
-![API Gateway Regional](/images/aws-web-ingress-patterns/05-apigw-regional.drawio.svg)
+![API Gateway Regional](/images/aws-web-ingress-patterns/05-apigw-regional.png)
 
 REST API にはエッジ最適化エンドポイント（AWS が管理する CloudFront）もありますが、DDoS 耐性のホワイトペーパーでは **Regional エンドポイント＋自社で管理する CloudFront** が推奨されています。WAF、キャッシュ、地理制限を自分でコントロールできるからです。
 
@@ -435,7 +435,7 @@ curl -s -o /dev/null -w '%{http_code}\n' \
 
 ## ⑥ CloudFront → VPC オリジン → 内部 ALB → Private API（閉域を維持）
 
-![Private API via VPC origin](/images/aws-web-ingress-patterns/06-private-api-vpc-origin.drawio.svg)
+![Private API via VPC origin](/images/aws-web-ingress-patterns/06-private-api-vpc-origin.png)
 
 API Gateway を Private API のまま CloudFront から公開したい場合の構成です。VPC オリジンで内部 ALB に入り、ALB のターゲットに `execute-api` インターフェイス VPC エンドポイントの IP を登録します。
 
@@ -463,7 +463,7 @@ aws apigateway get-rest-api --rest-api-id abc123 \
 
 ## ⑦ Global Accelerator + 内部 ALB（固定 Anycast IP / HTTP 以外も可）
 
-![Global Accelerator](/images/aws-web-ingress-patterns/07-global-accelerator.drawio.svg)
+![Global Accelerator](/images/aws-web-ingress-patterns/07-global-accelerator.png)
 
 固定 IP が必要な場合や、TCP / UDP を受けたい場合の選択肢です。内部 ALB もエンドポイントにできます。
 
@@ -497,7 +497,7 @@ aws globalaccelerator list-endpoint-groups --listener-arn <listener-arn> --regio
 
 ## ⑧ 公開 ALB で直接受ける（CloudFront なし）
 
-![公開ALB直受け](/images/aws-web-ingress-patterns/08-public-alb-direct.drawio.svg)
+![公開ALB直受け](/images/aws-web-ingress-patterns/08-public-alb-direct.png)
 
 攻撃者のリクエストも ALB までは届く前提で、ALB 自体を固める構成です。
 
@@ -542,7 +542,7 @@ curl -sI http://www.example.com/ | grep -iE '^(HTTP|location)'
 
 ここまでの①〜⑧は「誰がオリジンに届くか（経路）」の話でした。WAF は層が違い、「届いたリクエストの中身を検査する」ものです。
 
-![防御レイヤーとWAFの位置付け](/images/aws-web-ingress-patterns/09-defense-layers.drawio.svg)
+![防御レイヤーとWAFの位置付け](/images/aws-web-ingress-patterns/09-defense-layers.png)
 
 - **B だけ（WAF だけ）の場合**：オリジンに直接来られると素通りです。冒頭の「第三者の CloudFront 経由で WAF を迂回される」話はこれです
 - **C・D だけ（経路の限定だけ）の場合**：正規の CloudFront を通って来る SQL インジェクションや HTTP flood は止まりません

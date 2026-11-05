@@ -30,7 +30,7 @@ https://zenn.dev/anfangd/articles/aws-web-ingress-origin-protection
 
 VPC オリジン・OAC・セキュリティグループは「誰がオリジンに届くか（経路）」を決めるものです。WAF は層が違い、「届いたリクエストの中身を検査する」ものです。
 
-![防御レイヤーとWAFの位置付け](/images/aws-waf-placement/defense-layers.drawio.svg)
+![防御レイヤーとWAFの位置付け](/images/aws-waf-placement/defense-layers.png)
 
 - **B だけ（WAF だけ）の場合**：オリジンに直接来られると素通りです。「第三者の CloudFront 経由で WAF を迂回される」と言われるのはこれです
 - **C・D だけ（経路の限定だけ）の場合**：正規の CloudFront を通って来る SQL インジェクションや HTTP flood は止まりません
