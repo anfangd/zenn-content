@@ -117,7 +117,7 @@ CloudFront の FAQ でも、マネージドな仕組みで要件を満たせな�
 - **VPC Block Public Access** を有効にすると、VPC オリジンの通信も止まります
 - VPC オリジンで絞れるのは「自アカウント内で VPC オリジンを設定したディストリビューション」までです。同じアカウントに複数のディストリビューションがあり、特定のディストリビューションだけに限定したい場合は、カスタムヘッダーの検証も併用します（[Origin cloaking](https://aws.amazon.com/developer/application-security-performance/articles/origin-cloaking)）
 
-### Terraform 例
+:::details Terraform 例：VPC オリジンとサービス管理 SG の参照
 
 ```hcl:vpc_origin.tf
 resource "aws_cloudfront_vpc_origin" "alb" {
@@ -162,6 +162,7 @@ resource "aws_vpc_security_group_ingress_rule" "alb_from_cf_vpc_origins" {
   to_port                      = 443
 }
 ```
+:::
 
 :::message alert
 `CloudFront-VPCOrigins-Service-SG` は AWS が管理するため、編集してはいけません。参照するだけにしてください。
@@ -200,7 +201,7 @@ resource "aws_vpc_security_group_ingress_rule" "alb_from_cf_vpc_origins" {
 3. CloudFront で**古い**ヘッダーの付与をやめる
 4. ALB のルールで古いヘッダーを拒否する
 
-### Terraform 例
+:::details Terraform 例：プレフィックスリストと秘密ヘッダー照合（fail-closed）
 
 ```hcl:alb_secret_header.tf
 data "aws_ec2_managed_prefix_list" "cloudfront" {
@@ -250,6 +251,7 @@ resource "aws_lb_listener_rule" "from_cloudfront" {
   }
 }
 ```
+:::
 
 :::message
 秘密の値は Terraform の state に平文で残ります。state の保管場所の暗号化とアクセス制御もセットで考えてください。
