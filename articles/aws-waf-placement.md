@@ -42,11 +42,15 @@ WAF の web ACL を関連付けられるのは、CloudFront、ALB、API Gateway 
 
 逆に、**NLB、Global Accelerator、S3、Lambda 関数 URL、API Gateway の HTTP API には直接付けられません**。これらを WAF で守るなら、前段に CloudFront を置くか、後段の ALB に付けます。
 
+![WAF を付けられる場所・付けられない場所](/images/aws-waf-placement/attach-targets.png)
+
 - [Associating or disassociating protection with an AWS resource - AWS WAF](https://docs.aws.amazon.com/waf/latest/developerguide/web-acl-associating-aws-resource.html)
 
 ### エッジ（CloudFront）に置くのが基本
 
 AWS の WAF 実装ガイドラインでは、インターネットに公開する Web アプリケーションには、制約がない限り **CloudFront と組み合わせて WAF を置く** ことを推奨しています。理由は次のとおりです。
+
+![エッジに WAF を置く理由](/images/aws-waf-placement/edge-first.png)
 
 - CloudFront の WAF の処理能力は CloudFront の拠点の規模に合わせてスケールし、リージョンの WAF の容量制約を受けません
 - CloudFront 自体が不正な HTTP リクエストや L3/L4 の攻撃を止めるので、WAF はアプリ層の検査に集中できます
@@ -94,6 +98,8 @@ WAF は既定で、リクエストの送信元 IP を使います。プロキシ
 
 結論として、**IP ベースのルールはエッジ（CloudFront）の WAF に寄せる** のが安全です。
 
+![ALB 側の WAF に見える IP と X-Forwarded-For](/images/aws-waf-placement/forwarded-ip.png)
+
 - [Using forwarded IP addresses in AWS WAF](https://docs.aws.amazon.com/waf/latest/developerguide/waf-rule-statement-forwarded-ip-address.html)
 
 **2. ボディを検査できるサイズが置き場所で違う**
@@ -112,21 +118,15 @@ WAF は既定で、リクエストの送信元 IP を使います。プロキシ
 
 WAF の内部エラーで判定が遅れた場合、**CloudFront は通常リクエストを通し、リージョンのサービスは通常拒否します**。エッジの WAF は可用性寄り（fail-open 寄り）、ALB の WAF は fail-closed 寄りです。ALB には `waf.fail_open.enabled`（既定 false）の属性もあります。
 
+![WAF の内部エラー時の挙動](/images/aws-waf-placement/failure-behavior.png)
+
 - [Configuring protection in AWS WAF](https://docs.aws.amazon.com/waf/latest/developerguide/web-acl.html)
 
 ## ルールの組み方
 
-DDoS 耐性のホワイトペーパーは、**早い段階で攻撃を減らす「漏斗型」** の順番を推奨しています。
+DDoS 耐性のホワイトペーパーは、**早い段階で攻撃を減らす「漏斗型」** の順番を推奨しています。上ほど判定が安く、下ほど中身を詳しく見るルールです。
 
-1. 許可する IP（Allow）
-2. ブロックする IP（Block）
-3. 国による制限（geo）
-4. Anti-DDoS マネージドルール
-5. Amazon IP reputation list
-6. 全体にかけるレートベースルール（高めの閾値）
-7. 用途別のレートベースルール（API・URI・JA3/JA4 など、低めの閾値）
-8. Core rule set
-9. Bot Control
+![ルールの漏斗型の順番](/images/aws-waf-placement/rule-funnel.png)
 
 レートベースルールについては、全体に高めの閾値をかけたうえで、キャッシュできない動的なエンドポイントやログインなどの重い処理には、より低い閾値のルールを別に足すのが推奨です。
 
@@ -137,6 +137,8 @@ DDoS 耐性のホワイトペーパーは、**早い段階で攻撃を減らす�
 - [Integrations for your Application Load Balancer](https://docs.aws.amazon.com/elasticloadbalancing/latest/application/load-balancer-integrations.html)
 
 ## 運用
+
+![ルールを Block にするまでの流れ](/images/aws-waf-placement/count-to-block.png)
 
 - **Count モードで試してから Block にする**：ステージングで調整したあと、本番トラフィックでも Count モードで影響を確認してから有効化します（[Testing and tuning your AWS WAF protections](https://docs.aws.amazon.com/waf/latest/developerguide/web-acl-testing.html)）
 - **ログを有効にする**：誤検知の調査や攻撃の分析には WAF のログが欠かせません。サンプリングされたリクエスト（直近 3 時間）だけでは足りないことが多いです
