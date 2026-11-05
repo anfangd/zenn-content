@@ -20,9 +20,9 @@ published: false
 
 元の投稿はこちらです。
 
-https://x.com/nasub7373/status/2117957893232451709
+@[tweet](https://x.com/nasub7373/status/2117957893232451709)
 
-https://x.com/___nix___/status/2117996284783300621
+@[tweet](https://x.com/___nix___/status/2117996284783300621)
 
 どれもその通りです。一方で、2024年11月に **CloudFront VPC オリジン** が登場してから、公式ドキュメントの推奨はかなり整理されています。
 
