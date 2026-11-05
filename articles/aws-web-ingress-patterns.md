@@ -68,7 +68,7 @@ https://zenn.dev/anfangd/articles/certificate-transparency-ct-log
 
 - **B だけ（WAF だけ）の場合**：オリジンに直接来られると素通りです。冒頭の「第三者の CloudFront 経由で WAF を迂回される」話はこれです
 - **C・D だけ（経路の限定だけ）の場合**：正規の CloudFront を通って来る SQL インジェクションや HTTP flood は止まりません
-- **基本形は B＋C＋D** です。E（リージョンの WAF）は、必要なときに足します
+- **基本形は A＋B＋C＋D** です（A の Shield Standard は CloudFront や GA を使えば自動で効きます）。E（リージョンの WAF）は、必要なときに足します
 
 ### WAF を付けられる場所・付けられない場所
 
