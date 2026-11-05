@@ -30,7 +30,7 @@ published: false
 
 ## TL;DR
 
-- AWS 公式の優先順位は **「VPC オリジン / OAC（マネージド）→ 使えない場合のみ プレフィックスリスト＋秘密ヘッダー」**
+- 公式ドキュメントから読み取れる優先順位は **「VPC オリジン / OAC（マネージド）→ 使えない場合のみ プレフィックスリスト＋秘密ヘッダー」**
 - **プレフィックスリストだけでは不十分**です。他人の CloudFront も同じ IP 帯から来るため、本体は秘密ヘッダーの照合です
 - **CT Log** にはオリジン用に取った証明書のホスト名が載るので、「ホスト名は知られる前提」で設計します
 - 新規構築なら **VPC オリジン＋`CloudFront-VPCOrigins-Service-SG` 限定** が第一候補です。名前を知られても、そもそも到達できません
@@ -345,6 +345,7 @@ curl -s -o /dev/null -w '%{http_code}\n' https://www.example.com/index.html
 - 関数 URL の `AuthType` は **`AWS_IAM`** にします
 - リソースベースポリシーでは、`cloudfront.amazonaws.com` に **`lambda:InvokeFunctionUrl` と `lambda:InvokeFunction` の両方**を許可し、`SourceArn` で自社のディストリビューションに限定します
 - OAC の署名動作は always にします
+- オリジンリクエストポリシーは `AllViewerExceptHostHeader` にします（関数 URL も Host ヘッダーに自分のドメイン名を期待するため）
 - POST / PUT でボディを送る場合は、利用者側でペイロードのハッシュ（`x-amz-content-sha256`）を計算する必要がある点に注意してください
 
 :::details 確認コマンド
@@ -371,11 +372,11 @@ curl -s -o /dev/null -w '%{http_code}\n' https://abcdefghij.lambda-url.ap-northe
 
 ![API Gateway Regional](/images/aws-web-ingress-patterns/05-apigw-regional.drawio.svg)
 
-REST API の既定はエッジ最適化（AWS が管理する CloudFront）ですが、DDoS 耐性のホワイトペーパーでは **Regional エンドポイント＋自社で管理する CloudFront** が推奨されています。WAF、キャッシュ、地理制限を自分でコントロールできるからです。
+REST API にはエッジ最適化エンドポイント（AWS が管理する CloudFront）もありますが、DDoS 耐性のホワイトペーパーでは **Regional エンドポイント＋自社で管理する CloudFront** が推奨されています。WAF、キャッシュ、地理制限を自分でコントロールできるからです。
 
 ### 設定プラクティス
 
-- CloudFront のキャッシュ動作で全ヘッダーを転送します（動的コンテンツとして扱い、キャッシュしない）
+- オリジンリクエストポリシーは **`AllViewerExceptHostHeader`**、キャッシュポリシーは `CachingDisabled` にします。API Gateway は Host ヘッダーに自分のドメイン名を期待するため、ビューワーの Host を転送すると 403 になります（[Use managed origin request policies](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/using-managed-origin-request-policies.html)）
 - **直接アクセス対策**として、CloudFront のオリジンカスタムヘッダーに `x-api-key` を設定し、API Gateway 側で API キーを必須にします
 - メソッド単位のスロットリングと Usage Plan で、バックエンドを過剰なトラフィックから守ります
 - WAF は、同じリージョンの Regional web ACL をステージに関連付けることもできます（CloudFront の WAF との二段構え）

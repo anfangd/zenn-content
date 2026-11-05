@@ -38,7 +38,7 @@ VPC オリジン・OAC・セキュリティグループは「誰がオリジン�
 
 ### WAF を付けられる場所・付けられない場所
 
-WAF の web ACL を関連付けられるのは、CloudFront、ALB、API Gateway の REST API、AppSync、Cognito ユーザープール、App Runner、Verified Access、Amplify、Bedrock AgentCore Gateway です。CloudFront 用は **Global スコープ（us-east-1 で作成）**、それ以外は **リソースと同じリージョンの Regional スコープ** になります。CloudFront に関連付けた web ACL は、他の種類のリソースには関連付けられません。
+WAF の web ACL を関連付けられるのは、CloudFront、ALB、API Gateway の REST API、AppSync、Cognito ユーザープール、App Runner、Verified Access、Amplify、Bedrock AgentCore Gateway です。CloudFront 用は **Global スコープ（us-east-1 で作成）**、ALB や API Gateway などは **リソースと同じリージョンの Regional スコープ** になります。CloudFront に関連付けた web ACL は、他の種類のリソースには関連付けられません。
 
 逆に、**NLB、Global Accelerator、S3、Lambda 関数 URL、API Gateway の HTTP API には直接付けられません**。これらを WAF で守るなら、前段に CloudFront を置くか、後段の ALB に付けます。
 
@@ -50,7 +50,7 @@ AWS の WAF 実装ガイドラインでは、インターネットに公開す�
 
 - CloudFront の WAF の処理能力は CloudFront の拠点の規模に合わせてスケールし、リージョンの WAF の容量制約を受けません
 - CloudFront 自体が不正な HTTP リクエストや L3/L4 の攻撃を止めるので、WAF はアプリ層の検査に集中できます
-- CloudFront や WAF が拒否したリクエストには、HTTP リクエスト料金やデータ転送料金がかかりません
+- CloudFront や WAF が拒否したリクエストには、CloudFront の HTTP リクエスト料金やデータ転送料金がかかりません（WAF の検査料金は別途かかります）
 
 リージョンの WAF（E）を足すのは、次のような場合です。
 
@@ -178,7 +178,7 @@ head -c 9000 /dev/zero | tr '\0' 'a' \
   | curl -s -o /dev/null -w '%{http_code}\n' -X POST --data-binary @- "$URL/api/upload"
 
 # 同じ URL に連続アクセス → レートベースルールの閾値を超えると 403 が混ざり始める
-# （WAF はレートを数十秒ごとに評価するので、すぐには切り替わらない）
+# （WAF はレートを約 10 秒ごとに評価するので、すぐには切り替わらない）
 for i in $(seq 1 300); do curl -s -o /dev/null -w '%{http_code}\n' "$URL/login"; done | sort | uniq -c
 ```
 

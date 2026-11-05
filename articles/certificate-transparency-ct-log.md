@@ -37,7 +37,7 @@ https://zenn.dev/anfangd/articles/aws-web-ingress-patterns
 
 ## CT とは
 
-CT は、公的な CA が発行した TLS 証明書を、**誰でも監査できる追記専用のログ**に記録する仕組みです。誤発行や不正発行の証明書を検知することが目的で、RFC 6962 で定義されています（後継は RFC 9162）。
+CT は、公的な CA が発行した TLS 証明書を、**誰でも監査できる追記専用のログ**に記録する仕組みです。誤発行や不正発行の証明書を検知することが目的で、RFC 6962 で定義されています（改訂版の RFC 9162 もありますが、現在のブラウザのポリシーは RFC 6962 方式のログが中心です）。
 
 - [RFC 6962: Certificate Transparency](https://www.rfc-editor.org/rfc/rfc6962)
 
@@ -137,7 +137,8 @@ curl -s 'https://crt.sh/?q=%25.example.com&output=json' | jq -r '.[].name_value'
 openssl s_client -connect www.example.com:443 -servername www.example.com </dev/null 2>/dev/null \
   | openssl x509 -noout -text | grep -A 30 'CT Precertificate SCTs'
 
-# 3. CAA レコード（どの CA に発行を許しているか。空なら制限なし）
+# 3. CAA レコード（どの CA に発行を許しているか）
+#    サブドメインに無ければ親ドメインの CAA が適用される。どこにも無ければ制限なし
 dig +short CAA example.com
 
 # 4. ACM で発行済みの証明書（＝ CT ログで公開されているホスト名の一覧でもある）
