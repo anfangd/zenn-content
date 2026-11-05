@@ -74,7 +74,7 @@ CT Log の話は、「構成（誰が何を持っているか）」と「フロ�
 
 ### 構成図
 
-![CAとCTの構成図](/images/certificate-transparency-ct-log/ca-ct-01-structure.drawio.svg)
+![CAとCTの構成図](/images/certificate-transparency-ct-log/ca-ct-01-structure.png)
 
 - ブラウザや OS は、信頼する**ルートストア**と、**既知の CT ログ一覧**（各ログの公開鍵）を、あらかじめ持っています
 - CA は、オフラインで保管するルート CA の下に**中間 CA** を置き、日々の証明書は中間 CA が署名します
@@ -83,7 +83,7 @@ CT Log の話は、「構成（誰が何を持っているか）」と「フロ�
 
 ### 発行フロー（証明書を作るとき）
 
-![発行フロー](/images/certificate-transparency-ct-log/ca-ct-02-issuance.drawio.svg)
+![発行フロー](/images/certificate-transparency-ct-log/ca-ct-02-issuance.png)
 
 登場人物は、サイト運営者、CA、CT ログの 3 者です。ブラウザは出てきません。
 
@@ -95,7 +95,7 @@ CT Log の話は、「構成（誰が何を持っているか）」と「フロ�
 
 ### 検証フロー（TLS 接続のたび）
 
-![検証フロー](/images/certificate-transparency-ct-log/ca-ct-03-verification.drawio.svg)
+![検証フロー](/images/certificate-transparency-ct-log/ca-ct-03-verification.png)
 
 登場人物はブラウザとサーバーだけで、**CA にも CT ログにも問い合わせません**。ブラウザは、手元のルートストアと既知ログ一覧を使って、次の点を確認します。
 
@@ -108,7 +108,7 @@ Chrome の場合、有効期間が 180 日以下の証明書では 2 個、そ�
 
 ### 監視フロー（常時）
 
-![監視フロー](/images/certificate-transparency-ct-log/ca-ct-04-monitoring.drawio.svg)
+![監視フロー](/images/certificate-transparency-ct-log/ca-ct-04-monitoring.png)
 
 ログに載った証明書を、モニターが常に読み取っています。
 
