@@ -3,7 +3,7 @@ title: "CT Log 入門：証明書を取るとホスト名が公開される仕�
 emoji: "📜"
 type: "tech" # tech: 技術記事 / idea: アイデア
 topics: ["TLS","証明書","CertificateTransparency","AWS","Security"]
-published: false
+published: true
 ---
 
 :::message

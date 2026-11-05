@@ -3,7 +3,7 @@ title: "AWS WAF をどこに置き、どう組むか：エッジとリージョ�
 emoji: "🧱"
 type: "tech" # tech: 技術記事 / idea: アイデア
 topics: ["AWS","WAF","CloudFront","ALB","Security"]
-published: false
+published: true
 ---
 
 :::message
