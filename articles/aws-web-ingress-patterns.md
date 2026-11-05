@@ -78,6 +78,8 @@ ACM の公開証明書は、自動的に CT ログに記録されます。ブラ
 
 対策としては、オリジン用の証明書をワイルドカード（`*.example.com`）にすれば、ログに載るのは `*.example.com` だけになり、個別のホスト名は出ません。ただし、これはホスト名を推測しにくくするだけの隠蔽策です。本筋は「名前を知られても届かない」構成にすることです。
 
+CA と CT がどうつながっているか（構成・発行・検証・監視）は、記事末尾の「付録：CA と CT の仕組み」に図でまとめています。
+
 ## 選定フロー
 
 ![選定フロー](/images/aws-web-ingress-patterns/00-decision-flow.drawio.svg)
@@ -420,3 +422,59 @@ HTTP(S) だけを受けるなら、キャッシュや WAF（Global）の面で C
 - 既存の公開 ALB 構成は、ステージングディストリビューションで検証しながら VPC オリジンへ段階的に移行できます
 
 構成図は draw.io 形式（`.drawio.svg`）でリポジトリに置いているので、自由に改変して使ってください。
+
+## 付録：CA と CT の仕組み
+
+CT Log の話は、「構成（誰が何を持っているか）」と「フロー（いつ何が流れるか）」を分けると理解しやすくなります。フローはさらに、**発行（1回だけ）**、**検証（TLS 接続のたび）**、**監視（常時）** の 3 つに分かれていて、それぞれ登場人物が違います。
+
+### 構成図
+
+![CAとCTの構成図](/images/aws-web-ingress-patterns/ca-ct-01-structure.drawio.svg)
+
+- ブラウザや OS は、信頼する**ルートストア**と、**既知の CT ログ一覧**（各ログの公開鍵）を、あらかじめ持っています
+- CA は、オフラインで保管するルート CA の下に**中間 CA** を置き、日々の証明書は中間 CA が署名します
+- CT ログは複数の事業者が運営する追記専用のマークル木で、木の根（STH）に署名して公開します
+- ルートストアに入っている CA なら、どのドメインの証明書でも発行できてしまいます。その発行をすべて公開して監視できるようにしたのが CT です
+
+### 発行フロー（証明書を作るとき）
+
+![発行フロー](/images/aws-web-ingress-patterns/ca-ct-02-issuance.drawio.svg)
+
+登場人物は、サイト運営者、CA、CT ログの 3 者です。ブラウザは出てきません。
+
+1. CA はドメインの管理を確認（DV）したあと、そのままでは使えない印を付けた**プレ証明書**を作り、複数の運営者の CT ログに提出します
+2. ログは、一定時間内に必ず公開するという署名付きの約束（**SCT**）を返します
+3. CA は SCT を埋め込んでから、本番の証明書に署名して発行します。ACM の場合は、少なくとも 3 つのログに提出してから発行します
+
+**ドメイン名が公開されるのは、このタイミング**です。
+
+### 検証フロー（TLS 接続のたび）
+
+![検証フロー](/images/aws-web-ingress-patterns/ca-ct-03-verification.drawio.svg)
+
+登場人物はブラウザとサーバーだけで、**CA にも CT ログにも問い合わせません**。ブラウザは、手元のルートストアと既知ログ一覧を使って、次の点を確認します。
+
+- チェーン：署名をたどってルートストアのルート CA に行き着くか
+- 有効期限とホスト名（SAN）
+- 失効していないか
+- SCT：ログの署名が正しいか。数と運営者の多様性がポリシーを満たすか
+
+Chrome の場合、有効期間が 180 日以下の証明書では 2 個、それを超える証明書では 3 個、別々のログからの SCT が必要です。
+
+### 監視フロー（常時）
+
+![監視フロー](/images/aws-web-ingress-patterns/ca-ct-04-monitoring.drawio.svg)
+
+ログに載った証明書を、モニターが常に読み取っています。
+
+- **自社**：身に覚えのない証明書が発行されていないかを監視します（検知）。あわせて DNS の CAA レコードで、発行できる CA を限定します（予防）
+- **攻撃者**：同じデータからホスト名を抜き出し、発行から数分でスキャンを始めます
+- **監査者**：包含証明と一貫性証明を使い、ログが後から消したり書き換えたりしていないかを確認します
+
+本文で書いた「ホスト名は知られる前提」は、この監視フローから来ています。
+
+参考：
+- [RFC 6962: Certificate Transparency](https://www.rfc-editor.org/rfc/rfc6962)
+- [AWS Certificate Manager concepts - Certificate Transparency Logging](https://docs.aws.amazon.com/acm/latest/userguide/acm-concepts.html)
+- [Chrome Certificate Transparency Policy](https://googlechrome.github.io/CertificateTransparency/ct_policy.html)
+- [Apple's Certificate Transparency policy](https://support.apple.com/en-us/103214)
