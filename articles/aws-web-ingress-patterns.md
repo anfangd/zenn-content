@@ -148,6 +148,30 @@ resource "aws_vpc_security_group_ingress_rule" "alb_from_cf_vpc_origins" {
 `CloudFront-VPCOrigins-Service-SG` は AWS が管理するため、編集してはいけません。参照するだけにしてください。
 :::
 
+:::details 確認コマンド
+```bash
+# ALB が internal になっているか（internet-facing なら見直し）
+aws elbv2 describe-load-balancers --names my-alb \
+  --query 'LoadBalancers[].[LoadBalancerName,Scheme,DNSName]' --output table
+
+# VPC オリジンの一覧と状態（Deployed になっているか）
+aws cloudfront list-vpc-origins \
+  --query 'VpcOriginList.Items[].[Id,Name,Status]' --output table
+
+# サービス管理 SG の ID（ALB の SG のインバウンド許可元にする）
+aws ec2 describe-security-groups \
+  --filters Name=group-name,Values=CloudFront-VPCOrigins-Service-SG \
+  --query 'SecurityGroups[].[GroupId,VpcId]' --output table
+
+# インターネットから ALB に直接届かないこと（タイムアウトすれば OK）
+curl -sS -m 5 -o /dev/null -w '%{http_code}\n' \
+  https://internal-my-alb-123456789.ap-northeast-1.elb.amazonaws.com/
+
+# CloudFront 経由では届くこと（200 など）
+curl -s -o /dev/null -w '%{http_code}\n' https://www.example.com/
+```
+:::
+
 根拠：
 - [Restrict access with VPC origins - Amazon CloudFront](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/private-content-vpc-origins.html)
 - [VPC BPA basics - Amazon VPC](https://docs.aws.amazon.com/vpc/latest/userguide/security-vpc-bpa-basics.html)
@@ -241,6 +265,28 @@ resource "aws_lb_listener_rule" "from_cloudfront" {
 公式ドキュメントのサンプル（CloudFormation）は `ViewerProtocolPolicy: allow-all` になっています。そのまま使うと Security Hub の CloudFront.3 に引っかかるので、`redirect-to-https` か `https-only` にしましょう。
 :::
 
+:::details 確認コマンド
+```bash
+# CloudFront のプレフィックスリスト ID（SG のインバウンド許可元にする）
+# MaxEntries は SG のルール数として数えられるので、SG のクォータに注意
+aws ec2 describe-managed-prefix-lists \
+  --filters Name=prefix-list-name,Values=com.amazonaws.global.cloudfront.origin-facing \
+  --query 'PrefixLists[].[PrefixListId,PrefixListName,MaxEntries]' --output table
+
+# リスナールールが「ヘッダー一致なら forward、デフォルトは fixed-response」になっているか
+aws elbv2 describe-rules --listener-arn <listener-arn> \
+  --query 'Rules[].[Priority,Conditions[0].HttpHeaderConfig.HttpHeaderName,Actions[0].Type]' \
+  --output table
+
+# ALB に直接：SG で遮断されてタイムアウトになること
+curl -sS -m 5 -o /dev/null -w '%{http_code}\n' \
+  https://my-alb-123456789.ap-northeast-1.elb.amazonaws.com/
+
+# 正規の CloudFront 経由：200 になること
+curl -s -o /dev/null -w '%{http_code}\n' https://www.example.com/
+```
+:::
+
 根拠：
 - [Restrict access to Application Load Balancers - Amazon CloudFront](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/restrict-access-to-load-balancer.html)
 - [Optimizing application performance: CloudFront with ALB (AWS Blog)](https://aws.amazon.com/blogs/networking-and-content-delivery/optimizing-application-performance-the-strategic-benefits-of-combining-amazon-cloudfront-with-application-load-balancers/)
@@ -266,6 +312,22 @@ S3 なら OAC（Origin Access Control）一択です。OAI はレガシー扱い
 - S3 のウェブサイトエンドポイントはカスタムオリジン扱いになるため、OAC は使えません
 - OAI からの移行では、まずバケットポリシーで OAI と OAC の両方を一時的に許可してから切り替えます
 
+:::details 確認コマンド
+```bash
+# OAC の署名動作が always になっているか
+aws cloudfront list-origin-access-controls \
+  --query 'OriginAccessControlList.Items[].[Id,Name,OriginAccessControlOriginType,SigningBehavior]' \
+  --output table
+
+# バケットポリシー：Principal が cloudfront.amazonaws.com、AWS:SourceArn が自分のディストリビューションか
+aws s3api get-bucket-policy --bucket my-bucket --query Policy --output text | jq .
+
+# S3 に直接アクセスすると 403、CloudFront 経由なら 200
+curl -s -o /dev/null -w '%{http_code}\n' https://my-bucket.s3.ap-northeast-1.amazonaws.com/index.html
+curl -s -o /dev/null -w '%{http_code}\n' https://www.example.com/index.html
+```
+:::
+
 根拠：
 - [Restrict access to an Amazon S3 origin - Amazon CloudFront](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/private-content-restricting-access-to-s3.html)
 - [Security Hub CSPM controls for CloudFront（CloudFront.13）](https://docs.aws.amazon.com/securityhub/latest/userguide/cloudfront-controls.html)
@@ -284,6 +346,20 @@ S3 なら OAC（Origin Access Control）一択です。OAI はレガシー扱い
 - リソースベースポリシーでは、`cloudfront.amazonaws.com` に **`lambda:InvokeFunctionUrl` と `lambda:InvokeFunction` の両方**を許可し、`SourceArn` で自社のディストリビューションに限定します
 - OAC の署名動作は always にします
 - POST / PUT でボディを送る場合は、利用者側でペイロードのハッシュ（`x-amz-content-sha256`）を計算する必要がある点に注意してください
+
+:::details 確認コマンド
+```bash
+# AuthType が AWS_IAM になっているか
+aws lambda get-function-url-config --function-name my-fn \
+  --query '[FunctionUrl,AuthType]' --output text
+
+# リソースベースポリシーに InvokeFunctionUrl と InvokeFunction の両方があるか
+aws lambda get-policy --function-name my-fn --query Policy --output text | jq .
+
+# 関数 URL に直接アクセスすると 403
+curl -s -o /dev/null -w '%{http_code}\n' https://abcdefghij.lambda-url.ap-northeast-1.on.aws/
+```
+:::
 
 根拠：
 - [Restrict access to an AWS Lambda function URL origin - Amazon CloudFront](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/private-content-restricting-access-to-lambda.html)
@@ -305,6 +381,18 @@ REST API の既定はエッジ最適化（AWS が管理する CloudFront）で�
 - WAF は、同じリージョンの Regional web ACL をステージに関連付けることもできます（CloudFront の WAF との二段構え）
 - カスタムドメインだけで受けたい場合は、デフォルトの `execute-api` エンドポイントを無効化できます。ただし **CloudFront のオリジンを `execute-api` ドメインにしているなら、無効化した時点で到達できなくなる**ので、オリジン側もカスタムドメインにしておく必要があります
 
+:::details 確認コマンド
+```bash
+# エンドポイントの種類（REGIONAL）と、デフォルトエンドポイントの無効化状態
+aws apigateway get-rest-api --rest-api-id abc123 \
+  --query '[name,endpointConfiguration.types,disableExecuteApiEndpoint]'
+
+# execute-api に API キーなしで直接アクセスすると 403
+curl -s -o /dev/null -w '%{http_code}\n' \
+  https://abc123.execute-api.ap-northeast-1.amazonaws.com/prod/items
+```
+:::
+
 根拠：
 - [Protecting API endpoints (BP4) - AWS Best Practices for DDoS Resiliency](https://docs.aws.amazon.com/whitepapers/latest/aws-best-practices-ddos-resiliency/protecting-api-endpoints-bp4.html)
 - [Use AWS WAF to protect your REST APIs in API Gateway](https://docs.aws.amazon.com/apigateway/latest/developerguide/apigateway-control-access-aws-waf.html)
@@ -324,6 +412,14 @@ API Gateway を Private API のまま CloudFront から公開したい場合の�
 - VPC エンドポイントポリシーも併用して、データペリメーターを強化します
 - ALB のターゲットグループのヘルスチェックは `200,403` を成功扱いにします（VPC エンドポイントはヘッダーなしの呼び出しに 403 を返すため）
 - ALB の SG は①と同じく、`CloudFront-VPCOrigins-Service-SG` だけを許可します
+
+:::details 確認コマンド
+```bash
+# PRIVATE になっているか、リソースポリシーに aws:SourceVpce の条件があるか
+aws apigateway get-rest-api --rest-api-id abc123 \
+  --query '[endpointConfiguration.types,endpointConfiguration.vpcEndpointIds,policy]'
+```
+:::
 
 根拠：
 - [Accessing private Amazon API Gateway endpoints through custom Amazon CloudFront distribution using VPC Origins (AWS Blog)](https://aws.amazon.com/blogs/compute/accessing-private-amazon-api-gateway-endpoints-through-custom-amazon-cloudfront-distribution-using-vpc-origins/)
@@ -346,6 +442,19 @@ API Gateway を Private API のまま CloudFront から公開したい場合の�
 - VPC Block Public Access を有効にすると、Global Accelerator からのインバウンドも止まります
 
 HTTP(S) だけを受けるなら、キャッシュや WAF（Global）の面で CloudFront＋VPC オリジンのほうが有利です。
+
+:::details 確認コマンド
+```bash
+# Global Accelerator の API は us-west-2 で呼び出す
+aws globalaccelerator list-accelerators --region us-west-2 \
+  --query 'Accelerators[].[Name,Status,IpSets[0].IpAddresses]'
+
+# エンドポイントごとにクライアント IP 保持が有効か（内部 ALB は常に true）
+aws globalaccelerator list-endpoint-groups --listener-arn <listener-arn> --region us-west-2 \
+  --query 'EndpointGroups[].EndpointDescriptions[].[EndpointId,ClientIPPreservationEnabled]' \
+  --output table
+```
+:::
 
 根拠：
 - [Guidelines and restrictions for client IP address preservation - AWS Global Accelerator](https://docs.aws.amazon.com/global-accelerator/latest/dg/preserve-client-ip-address.how-to-enable-preservation.html)
@@ -373,6 +482,22 @@ HTTP(S) だけを受けるなら、キャッシュや WAF（Global）の面で C
 - `waf.fail_open.enabled` は既定の false（fail-closed）のままにします
 - ターゲットの SG は ALB の SG からだけ許可します
 - エッジでの吸収やキャッシュがないため、可能なら①への移行を検討しましょう
+
+:::details 確認コマンド
+```bash
+# desync 対策・不正ヘッダー破棄・WAF fail open・ログ・削除保護の設定値
+aws elbv2 describe-load-balancer-attributes --load-balancer-arn <alb-arn> \
+  --query "Attributes[?Key=='routing.http.desync_mitigation_mode' || Key=='routing.http.drop_invalid_header_fields.enabled' || Key=='waf.fail_open.enabled' || Key=='access_logs.s3.enabled' || Key=='deletion_protection.enabled']" \
+  --output table
+
+# WAF の web ACL が関連付いているか
+aws wafv2 get-web-acl-for-resource --resource-arn <alb-arn> \
+  --query 'WebACL.Name' --output text
+
+# HTTP が HTTPS にリダイレクトされるか（301 と Location）
+curl -sI http://www.example.com/ | grep -iE '^(HTTP|location)'
+```
+:::
 
 根拠：
 - [Edit attributes for your Application Load Balancer](https://docs.aws.amazon.com/elasticloadbalancing/latest/application/edit-load-balancer-attributes.html)
@@ -425,6 +550,14 @@ https://zenn.dev/anfangd/articles/aws-waf-placement
 | CloudFront.15 | 推奨 TLS ポリシー（`TLSv1.2_2025` / `TLSv1.3_2025`）を使う |
 | CloudFront.16 | Lambda 関数 URL オリジンに OAC を使う |
 
+:::details 確認コマンド
+```bash
+# ビューワープロトコル・TLS ポリシー・WAF・各オリジンの閉じ方（VPC オリジン / OAC）を一覧
+aws cloudfront get-distribution-config --id E123EXAMPLE \
+  --query 'DistributionConfig.{Viewer:DefaultCacheBehavior.ViewerProtocolPolicy,TLS:ViewerCertificate.MinimumProtocolVersion,WebACL:WebACLId,Origins:Origins.Items[].{Id:Id,Domain:DomainName,VpcOrigin:VpcOriginConfig.VpcOriginId,OAC:OriginAccessControlId}}'
+```
+:::
+
 - [Security Hub CSPM controls for Amazon CloudFront](https://docs.aws.amazon.com/securityhub/latest/userguide/cloudfront-controls.html)
 
 ## まとめ
@@ -434,4 +567,3 @@ https://zenn.dev/anfangd/articles/aws-waf-placement
 - 新規構築なら、まず **VPC オリジン（ALB / NLB / EC2）と OAC（S3 / Lambda 関数 URL）** を検討します。fail-closed で決定論的な、運用しやすい構成になります
 - 既存の公開 ALB 構成は、ステージングディストリビューションで検証しながら VPC オリジンへ段階的に移行できます
 
-構成図は draw.io 形式（`.drawio.svg`）でリポジトリに置いているので、自由に改変して使ってください。

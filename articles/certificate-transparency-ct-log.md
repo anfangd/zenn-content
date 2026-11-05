@@ -125,6 +125,28 @@ Chrome の場合、有効期間が 180 日以下の証明書では 2 個、そ�
 - **隠蔽（補助）**：オリジン用の証明書をワイルドカード（`*.example.com`）にすれば、ログに載るのは `*.example.com` だけで、個別のホスト名は出ません。ただし推測しにくくするだけです
 - **本筋**：ホスト名は知られる前提で、「名前を知られても届かない」構成にします。AWS なら CloudFront の VPC オリジンや OAC です（詳しくは[こちらの記事](https://zenn.dev/anfangd/articles/aws-web-ingress-patterns)）
 
+## 手を動かして確かめる
+
+`example.com` を自分のドメインに置き換えて試してみてください。
+
+```bash
+# 1. 自分のドメインで、どのホスト名の証明書が CT ログに載っているか（crt.sh の JSON API）
+curl -s 'https://crt.sh/?q=%25.example.com&output=json' | jq -r '.[].name_value' | sort -u
+
+# 2. サーバー証明書に埋め込まれた SCT を見る（ログ ID・タイムスタンプ・署名が並ぶ）
+openssl s_client -connect www.example.com:443 -servername www.example.com </dev/null 2>/dev/null \
+  | openssl x509 -noout -text | grep -A 30 'CT Precertificate SCTs'
+
+# 3. CAA レコード（どの CA に発行を許しているか。空なら制限なし）
+dig +short CAA example.com
+
+# 4. ACM で発行済みの証明書（＝ CT ログで公開されているホスト名の一覧でもある）
+aws acm list-certificates --region us-east-1 \
+  --query 'CertificateSummaryList[].[DomainName,CertificateArn]' --output table
+```
+
+1 の結果に、公開していないつもりのホスト名（`origin.`、`stg-`、`admin.` など）が並んでいたら、それは誰でも見られる状態です。2 で SCT が複数並んでいれば、その証明書は発行時に複数のログに登録されています。
+
 ## 最近の動き
 
 - CT ログの実装は、RFC 6962 方式から、静的ファイルで配信する「タイル型」（static-ct-api）へ移りつつあります。Chrome では 2025年11月に、「少なくとも 1 つは RFC 6962 方式のログの SCT を含める」という要件を外すかどうかの議論が始まっています（[ct-policy](https://groups.google.com/a/chromium.org/g/ct-policy/c/amrnTiDFdwM)）
@@ -137,7 +159,6 @@ Chrome の場合、有効期間が 180 日以下の証明書では 2 個、そ�
 - ブラウザは接続時にログへ問い合わせず、証明書に埋め込まれた SCT で確認します。ログの正しさは監査者が事後に確かめます
 - 対策は、CAA と CT 監視で自分の証明書を守りつつ、インフラは「名前を知られても届かない」構成にすることです
 
-構成図は draw.io 形式（`.drawio.svg`）でリポジトリに置いているので、自由に改変して使ってください。
 
 ## 参考
 

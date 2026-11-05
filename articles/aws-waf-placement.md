@@ -88,7 +88,7 @@ WAF は既定で、リクエストの送信元 IP を使います。プロキシ
 ここで注意したいのが次の 2 点です。
 
 - 指定したヘッダーがリクエストにない場合、WAF は**そのルールをまったく適用しません**
-- WAF は**ヘッダーの先頭の IP** を使います。`X-Forwarded-For` はクライアントが自分で付けて送れるので、先頭は偽装できてしまいます（これは私の補足です）
+- WAF は**ヘッダーの先頭の IP** を使います。一方 CloudFront は、クライアントが `X-Forwarded-For` を付けて送ってきた場合、その**末尾**に接続元の IP を追記してオリジンに転送します。つまり ALB 側で見る先頭の値は、クライアントが自由に書き換えられます（[Request and response behavior for custom origins](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/RequestAndResponseBehaviorCustomOrigin.html)）
 
 なお、Bot Control と Anti-DDoS のマネージドルールグループは、CloudFront などの CDN 経由のトラフィックを自動で認識し、元のクライアント IP を使ってくれます。
 
@@ -143,6 +143,71 @@ DDoS 耐性のホワイトペーパーは、**早い段階で攻撃を減らす�
 - **組織で統一する**：AWS Firewall Manager を使うと、組織全体のアカウントに WAF のポリシーを一括で配布・是正できます
 - **Shield Advanced を使う場合**：レートベースルールを含む web ACL の関連付けが前提です。2026年3月26日から、HTTP flood 対策の既定は Anti-DDoS マネージドルールグループになり、従来の L7 自動緩和機能を置き換えています（[Automating application layer DDoS mitigation](https://docs.aws.amazon.com/waf/latest/developerguide/ddos-automatic-app-layer-response.html)）
 
+## 確認・テスト用のコマンド
+
+### 設定の確認
+
+```bash
+# CloudFront 用の web ACL は us-east-1 / CLOUDFRONT スコープ
+aws wafv2 list-web-acls --scope CLOUDFRONT --region us-east-1 \
+  --query 'WebACLs[].[Name,Id]' --output table
+
+# ALB などリージョンのリソースに付いている web ACL
+aws wafv2 get-web-acl-for-resource --resource-arn <alb-arn> --region ap-northeast-1 \
+  --query 'WebACL.Name' --output text
+
+# ログの出力先が設定されているか
+aws wafv2 get-logging-configuration --resource-arn <web-acl-arn> --region us-east-1
+```
+
+### ルールが効いているかのテスト
+
+自分が管理するサイトに対してだけ実行してください。最初は Count モードで、メトリクスやログに記録されるかを見るのが安全です。
+
+```bash
+URL=https://www.example.com
+
+# XSS のような文字列を含むクエリ → Core rule set で 403
+curl -s -o /dev/null -w '%{http_code}\n' "$URL/?q=%3Cscript%3Ealert(1)%3C%2Fscript%3E"
+
+# Log4j の攻撃パターンを含むヘッダー → Known bad inputs で 403
+curl -s -o /dev/null -w '%{http_code}\n' -H 'User-Agent: ${jndi:ldap://example.com/a}' "$URL/"
+
+# 8 KB を超えるボディ → Core rule set の SizeRestrictions_BODY で 403（アップロード API の誤検知チェック）
+head -c 9000 /dev/zero | tr '\0' 'a' \
+  | curl -s -o /dev/null -w '%{http_code}\n' -X POST --data-binary @- "$URL/api/upload"
+
+# 同じ URL に連続アクセス → レートベースルールの閾値を超えると 403 が混ざり始める
+# （WAF はレートを数十秒ごとに評価するので、すぐには切り替わらない）
+for i in $(seq 1 300); do curl -s -o /dev/null -w '%{http_code}\n' "$URL/login"; done | sort | uniq -c
+```
+
+### 運用中の調査
+
+```bash
+# レートベースルールで現在制限中の IP（IP / forwarded IP で集約しているルールのみ）
+aws wafv2 get-rate-based-statement-managed-keys --scope CLOUDFRONT --region us-east-1 \
+  --web-acl-name my-acl --web-acl-id <web-acl-id> --rule-name rate-limit-all
+
+# 直近にルールにマッチしたリクエストのサンプル（最大 3 時間前まで）
+# date -d は GNU date の書き方（macOS では gdate などを使う）
+aws wafv2 get-sampled-requests --web-acl-arn <web-acl-arn> \
+  --rule-metric-name AWS-AWSManagedRulesCommonRuleSet \
+  --scope CLOUDFRONT --region us-east-1 --max-items 100 \
+  --time-window StartTime=$(date -u -d '-1 hour' +%Y-%m-%dT%H:%M:%SZ),EndTime=$(date -u +%Y-%m-%dT%H:%M:%SZ) \
+  --query 'SampledRequests[].[Request.ClientIP,Request.URI,Action,RuleNameWithinRuleGroup]' \
+  --output table
+```
+
+WAF のログを CloudWatch Logs に出している場合は、Logs Insights で「どのルールが何件ブロックしたか」を集計できます。
+
+```sql
+fields @timestamp, httpRequest.clientIp, httpRequest.uri, terminatingRuleId, action
+| filter action = "BLOCK"
+| stats count(*) as blocked by terminatingRuleId
+| sort blocked desc
+```
+
 ## まとめ
 
 - WAF は中身を検査する層。経路を絞る層（VPC オリジン / OAC / SG）と組み合わせて初めて効きます
@@ -150,4 +215,3 @@ DDoS 耐性のホワイトペーパーは、**早い段階で攻撃を減らす�
 - IP ベースのルールはエッジに寄せる、ボディの検査上限を意識する、内部エラー時の挙動の違いを知っておく
 - ルールは漏斗型に並べ、Count モードで確かめてから有効化し、ログで調整し続けます
 
-構成図は draw.io 形式（`.drawio.svg`）でリポジトリに置いているので、自由に改変して使ってください。
