@@ -14,7 +14,7 @@ published: true
 
 AWS で Web リクエストを受ける構成を整理していたら、WAF の話だけで 1 本分のボリュームになったので、記事を分けました。構成パターンの話はこちらです。
 
-https://zenn.dev/anfangd/articles/aws-web-ingress-patterns-4a621f
+https://zenn.dev/anfangd/articles/aws-web-ingress-origin-protection
 
 この記事では、WAF を**どこに置くか（位置付け・置き場所）**と、**置いたあとにどう組むか（注意点・ルール・運用）**を、公式ドキュメントの根拠付きでまとめます。
 
@@ -77,7 +77,7 @@ AWS の WAF 実装ガイドラインでは、インターネットに公開す�
 
 パターン①〜⑧ の構成そのものは、こちらの記事で解説しています。
 
-https://zenn.dev/anfangd/articles/aws-web-ingress-patterns-4a621f
+https://zenn.dev/anfangd/articles/aws-web-ingress-origin-protection
 
 ## 組み合わせるときの注意点
 
