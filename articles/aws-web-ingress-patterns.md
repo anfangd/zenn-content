@@ -36,7 +36,7 @@ published: false
 - 新規構築なら **VPC オリジン＋`CloudFront-VPCOrigins-Service-SG` 限定** が第一候補です。名前を知られても、そもそも到達できません
 - **WAF は「中身を検査する層」、VPC オリジン / OAC / SG は「届く経路を絞る層」** です。役割が違うので両方必要で、WAF の主戦場はエッジ（CloudFront）です
 
-## 5 年前のプラクティスと、いまのプラクティス
+## 以前のプラクティスと、いまのプラクティス
 
 私自身、これまで「ALB をインターネットに公開し、その前に CloudFront を置く」構成を何度も作ってきました。当時はそれが一般的な作り方で、**SG で CloudFront の IP に絞る**、**秘密ヘッダーで照合する**、といった対策をプラクティスとして実装していました。
 
@@ -44,17 +44,23 @@ ALB をインターネットに公開する構成は今もよく見かけます�
 
 | 時期 | 出来事 | 何が変わったか |
 |---|---|---|
-| 2020年10月 | AWS Security Blog で、カスタムヘッダー＋WAF＋Secrets Manager によるオリジン保護が紹介される | 秘密ヘッダー方式が定番に |
-| 2022年2月 | CloudFront のマネージドプレフィックスリスト | CloudFront の IP 範囲を自前で更新する仕組みが不要に |
+| 2015年12月 | CloudFront がオリジンへのカスタムヘッダー追加に対応 | 秘密ヘッダーで「CloudFront 経由か」を照合できるように |
+| 2016年頃 | AWS Security Blog で、CloudFront の IP 範囲を Lambda で SG に自動反映する方法が紹介される | SG で CloudFront の IP に絞る方式が広まる |
+| 2016年8月 | ALB 登場 | CloudFront → ALB の構成が定番に |
+| 2020年10月 | AWS Security Blog で、WAF＋Secrets Manager による秘密ヘッダーのローテーションが紹介される | 秘密ヘッダー方式の運用（ローテーション）が整う |
+| 2022年2月 | CloudFront のマネージドプレフィックスリスト | IP 範囲を Lambda で更新する仕組みが不要に |
 | 2022年8月 | OAC（S3 向け） | OAI の制約（SSE-KMS など）が解消 |
 | 2024年4月 | OAC が Lambda 関数 URL に対応 | 関数 URL も CloudFront 専用にできるように |
 | 2024年11月 | **VPC オリジン** | ALB / NLB / EC2 をプライベートサブネットに置いたまま CloudFront から使えるように |
 | 2025年11月 | VPC オリジンのクロスアカウント対応 | CloudFront とオリジンを別アカウントに分けた構成でも使えるように |
 
-AWS 自身も、VPC オリジンの発表で「これまで VPC 内のオリジンはパブリックサブネットに置く必要があった」と書いています。つまり、5 年前のベストプラクティスだった秘密ヘッダー方式は、今では**VPC オリジンが使えない場合のフォールバック**という位置付けになりました。
+AWS 自身も、VPC オリジンの発表で「これまで VPC 内のオリジンはパブリックサブネットに置く必要があった」と書いています。つまり、10 年近く定番だった「ALB を公開して IP 制限と秘密ヘッダーで守る」方式は、今では**VPC オリジンが使えない場合のフォールバック**という位置付けになりました。
 
 この記事は、そうした変化を踏まえて「いま新しく作るなら、あるいは見直すなら、どう作るか」を整理したものです。
 
+- [Now Add or Modify Request Headers Forwarded From Amazon CloudFront to Origin (2015)](https://aws.amazon.com/about-aws/whats-new/2015/12/now-add-or-modify-request-headers-forwarded-from-amazon-cloudfront-to-origin/)
+- [How to Automatically Update Your Security Groups for Amazon CloudFront and AWS WAF by Using AWS Lambda (AWS Security Blog)](https://aws.amazon.com/blogs/security/how-to-automatically-update-your-security-groups-for-amazon-cloudfront-and-aws-waf-by-using-aws-lambda/)
+- [Announcing Application Load Balancer for Elastic Load Balancing (2016)](https://aws.amazon.com/about-aws/whats-new/2016/08/announcing-application-load-balancer-for-elastic-load-balancing/)
 - [How to enhance Amazon CloudFront origin security with AWS WAF and AWS Secrets Manager (AWS Security Blog, 2020)](https://aws.amazon.com/blogs/security/how-to-enhance-amazon-cloudfront-origin-security-with-aws-waf-and-aws-secrets-manager/)
 - [Amazon VPC now supports an AWS-managed prefix list for Amazon CloudFront (2022)](https://aws.amazon.com/about-aws/whats-new/2022/02/amazon-cloudfront-managed-prefix-list/)
 - [Amazon CloudFront launches Origin Access Control (OAC) (2022)](https://aws.amazon.com/about-aws/whats-new/2022/08/amazon-cloudfront-origin-access-control/)
