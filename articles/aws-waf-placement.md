@@ -1,5 +1,5 @@
 ---
-title: "AWS WAF をどこに置き、どう組むか：エッジとリージョンの使い分け・注意点・ルール設計"
+title: "AWS WAF、どこに置いてどう組んでいますか？ エッジとリージョンの使い分けと注意点"
 emoji: "🧱"
 type: "tech" # tech: 技術記事 / idea: アイデア
 topics: ["AWS","WAF","CloudFront","ALB","Security"]
