@@ -90,7 +90,7 @@ AWS の WAF 実装ガイドラインでは、インターネットに公開す�
 - ②（公開 ALB）のように、エッジを通らない経路が論理的に残っている場合の保険
 - ⑦（Global Accelerator）や ⑧（公開 ALB 直受け）のように、そもそも CloudFront がない場合（ALB 側が唯一の WAF になります）
 
-- [Guidelines for Implementing AWS WAF (Whitepaper)](https://docs.aws.amazon.com/whitepapers/latest/guidelines-for-implementing-aws-waf/guidelines-for-implementing-aws-waf.html)
+- [AWS WAF integration design - Guidelines for Implementing AWS WAF (Whitepaper)](https://docs.aws.amazon.com/whitepapers/latest/guidelines-for-implementing-aws-waf/aws-waf-integration-design.html)
 - [Amazon CloudFront - AWS Best Practices for DDoS Resiliency](https://docs.aws.amazon.com/whitepapers/latest/aws-best-practices-ddos-resiliency/cloudfront.html)
 
 ### 構成パターンごとの置き場所
