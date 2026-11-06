@@ -606,3 +606,4 @@ aws cloudfront get-distribution-config --id E123EXAMPLE \
 
 - [Amazon CloudFront のパブリックオリジンからプライベート VPC オリジンへの移行（AWS ブログ）](https://aws.amazon.com/jp/blogs/news/migrate-amazon-cloudfront-public-origins-to-private-vpc-origins)
 - [カスタムヘッダー方式の CloudFront + ALB 構成を VPC オリジンに移行してみた（DevelopersIO）](https://dev.classmethod.jp/articles/cloudfront-alb-vpc/)
+
