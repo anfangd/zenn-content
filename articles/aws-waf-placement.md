@@ -115,7 +115,7 @@ https://zenn.dev/anfangd/articles/aws-web-ingress-origin-protection
 
 **1. ALB 側の WAF には、クライアントの IP ではなく CloudFront の IP が見える**
 
-WAF は既定で、リクエストの送信元 IP を使います。プロキシやロードバランサーを経由すると、それは最後のプロキシのアドレスになります。そのため CloudFront の背後にある ALB の WAF で、IP セット、国（geo）、レートベースのルールを使うには、`X-Forwarded-For` などを使う forwarded IP の設定が必要です。
+CloudFront の後ろにいる ALB から見ると、通信してくる相手は利用者ではなく CloudFront です。WAF も既定ではこの接続元の IP で判定するので、何もしないと全員が CloudFront の IP に見えてしまいます。そのため ALB の WAF で、IP セット、国（geo）、レートベースのルールを使うには、`X-Forwarded-For` などを使う forwarded IP の設定が必要です。
 
 ここで注意したいのが次の 2 点です。
 
