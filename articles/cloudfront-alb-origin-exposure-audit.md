@@ -383,6 +383,7 @@ resource "aws_lb" "web_internal" {
 
 - [Restrict access with VPC origins - Amazon CloudFront](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/private-content-vpc-origins.html)
 - [Use CloudFront continuous deployment to safely test CDN configuration changes](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/continuous-deployment.html)
+- [Amazon CloudFront のパブリックオリジンからプライベート VPC オリジンへの移行（AWS ブログ、2026 年 4 月）](https://aws.amazon.com/jp/blogs/news/migrate-amazon-cloudfront-public-origins-to-private-vpc-origins)
 - [AWS::ElasticLoadBalancingV2::LoadBalancer（Scheme は Update requires: Replacement）](https://docs.aws.amazon.com/AWSCloudFormation/latest/TemplateReference/aws-resource-elasticloadbalancingv2-loadbalancer.html)
 
 ### ステップ 3：再発を防ぐ
@@ -464,3 +465,8 @@ https://zenn.dev/anfangd/articles/aws-web-ingress-origin-protection
 https://zenn.dev/anfangd/articles/aws-waf-placement
 
 https://zenn.dev/anfangd/articles/ct-log-hostname-exposure-ca-ct
+
+移行や検証の進め方は、次の記事も参考になります。
+
+- [Amazon CloudFront のパブリックオリジンからプライベート VPC オリジンへの移行（AWS ブログ）](https://aws.amazon.com/jp/blogs/news/migrate-amazon-cloudfront-public-origins-to-private-vpc-origins)
+- [カスタムヘッダー方式の CloudFront + ALB 構成を VPC オリジンに移行してみた（DevelopersIO）](https://dev.classmethod.jp/articles/cloudfront-alb-vpc/)
