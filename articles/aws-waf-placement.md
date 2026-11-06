@@ -240,6 +240,4 @@ fields @timestamp, httpRequest.clientIp, httpRequest.uri, terminatingRuleId, act
 
 ## おわりに
 
-AWS WAF は 2015 年にようやく CloudFront に付いたのですが、年表を作ってみて、当時はそれだけでは十分じゃなかったんだなと今さら思いました。
-
-あと、Terraform でインフラを管理していると、WAF のルールを少し変えただけで全部変わったように見えるのが、いつも面倒だなと思っています。
+Terraform でインフラを管理していると、WAF のルールを少し変えただけで全部変わったように見えるのが、いつも面倒だなと思っています。
