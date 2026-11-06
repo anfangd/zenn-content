@@ -454,7 +454,7 @@ https://zenn.dev/anfangd/articles/continuous-security-assessment-ai-agent
 
 ## おわりに
 
-昔この構成を作っていた頃、私は秘密ヘッダーのキーローテーションまではできていなかったと思います。今なら、迷わず ALB は完全に VPC の中に閉じ込めます。
+今なら、迷わず ALB は完全に VPC の中に閉じ込めます。
 
 ## 関連する記事
 
