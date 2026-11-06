@@ -600,3 +600,9 @@ aws cloudfront get-distribution-config --id E123EXAMPLE \
 - 新規構築なら、まず **VPC オリジン（ALB / NLB / EC2）と OAC（S3 / Lambda 関数 URL）** を検討します。fail-closed で決定論的な、運用しやすい構成になります
 - 既存の公開 ALB 構成は、ステージングディストリビューションで検証しながら VPC オリジンへ段階的に移行できます
 
+## 関連する記事
+
+既存の構成を VPC オリジンへ移行する手順は、次の記事が参考になります。
+
+- [Amazon CloudFront のパブリックオリジンからプライベート VPC オリジンへの移行（AWS ブログ）](https://aws.amazon.com/jp/blogs/news/migrate-amazon-cloudfront-public-origins-to-private-vpc-origins)
+- [カスタムヘッダー方式の CloudFront + ALB 構成を VPC オリジンに移行してみた（DevelopersIO）](https://dev.classmethod.jp/articles/cloudfront-alb-vpc/)
