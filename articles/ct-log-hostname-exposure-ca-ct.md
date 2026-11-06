@@ -1,5 +1,5 @@
 ---
-title: "CT Log 入門：証明書を取るとホスト名が公開される仕組みを、CA と CT の構成・発行・検証・監視から理解する"
+title: "証明書を取るとホスト名が知られるのはなぜ？ CT Log の仕組みを CA と CT の流れから理解する"
 emoji: "📜"
 type: "tech" # tech: 技術記事 / idea: アイデア
 topics: ["TLS","証明書","CertificateTransparency","AWS","Security"]
