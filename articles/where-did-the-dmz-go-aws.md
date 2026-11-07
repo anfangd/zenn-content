@@ -17,7 +17,7 @@ published: false
 ## TL;DR
 
 - 昔の DMZ は「サーバーを置く区画」でした。今の AWS では、DMZ にサーバーを置く構成はほぼなくなっています
-- 残っている形は 3 つです。**① なくす型**（エッジ＋VPC オリジン＋Regional NAT GW）、**② 小さくする型**（public サブネットにマネージドな入口・出口だけ置く）、**③ 集約する型**（入口・出口・検査の VPC をアカウントごと分ける）
+- 残っている形は 3 つです。**① なくす型**（エッジ＋VPC オリジン＋Regional NAT GW）、**② 小さくする型**（public サブネットにマネージドな入口と出口だけ置く）、**③ 集約する型**（入口、出口、検査の VPC をアカウントごと分ける）
 - 変わったのは「境界をどこに置くか」です。① はエッジ、② はサブネット、③ はアカウントが境界になります
 - ① でも IGW はなくなりません。ルートではなく「この VPC はインターネットから受ける」という目印として使われます
 
@@ -25,7 +25,7 @@ published: false
 
 基本情報技術者試験などで習う DMZ は、FW を 2 枚重ね、その間の区画に外と接するサーバーを置く構成です。
 
-![昔の DMZ。インターネットと内部ネットワークの間に FW を 2 枚置き、その間の DMZ に Web・DNS・メール中継・外向きプロキシ・踏み台を置く](/images/where-did-the-dmz-go-aws/legacy-dmz.png)
+![昔の DMZ。インターネットと内部ネットワークの間に FW を 2 枚置き、その間の DMZ に Web、DNS、メール中継、外向きプロキシ、踏み台を置く](/images/where-did-the-dmz-go-aws/legacy-dmz.png)
 
 DMZ には、外から来る通信を受けるサーバー（Web、DNS、メール）と、中から外に出るためのサーバー（外向きプロキシ）、管理用の踏み台が同居していました。どの区画にいるかで、どこまで信頼するかが決まる考え方です。
 
@@ -35,14 +35,14 @@ DMZ には、外から来る通信を受けるサーバー（Web、DNS、メー�
 
 | 昔の DMZ の役割 | 今の主な担当 | VPC の中にサーバーが要るか |
 | --- | --- | --- |
-| Web・リバースプロキシ | CloudFront + WAF（＋VPC オリジン） | 要らない（エッジ） |
+| Web とリバースプロキシ | CloudFront + WAF（＋VPC オリジン） | 要らない（エッジ） |
 | 外部向け DNS | Route 53 の公開ホストゾーン | 要らない |
 | メール送信の中継 | Amazon SES | 要らない |
 | 踏み台サーバー | Session Manager、EC2 Instance Connect Endpoint | 要らない（IAM で制御） |
 | 外向きプロキシ | NAT GW、Network Firewall、Route 53 Resolver DNS Firewall | NAT GW は要る（Regional なら public サブネット不要） |
 | HTTP 以外の公開（SFTP、UDP など） | internet-facing NLB、Global Accelerator、Transfer Family | 場合による |
 
-Web・DNS・メール・踏み台は、VPC の外のマネージドサービスか、IAM で制御する仕組みに移りました。最後まで VPC の中に何かが残るのは、外向きの通信と HTTP 以外の公開です。この 2 つが、次の 3 パターンの分かれ目になります。
+Web、DNS、メール、踏み台は、VPC の外のマネージドサービスか、IAM で制御する仕組みに移りました。最後まで VPC の中に何かが残るのは、外向きの通信と HTTP 以外の公開です。この 2 つが、次の 3 パターンの分かれ目になります。
 
 ## 今の構成は 3 つのパターンに分かれる
 
@@ -67,10 +67,10 @@ Regional NAT GW については、AWS も「public サブネットがなくな�
 
 ### ② 小さくする型：public サブネットに機器だけ置く
 
-public サブネットは残すものの、置くのはマネージドな入口・出口の機器だけで、EC2 は置かない構成です。
+public サブネットは残すものの、置くのはマネージドな入口と出口の機器だけで、EC2 は置かない構成です。
 
 - **zonal NAT GW**：今までの NAT GW です。AZ ごとに public サブネットに置きます
-- **internet-facing の ALB・NLB**：internet-facing の LB はノードが public IP を持ち（[ELB のドキュメント](https://docs.aws.amazon.com/elasticloadbalancing/latest/userguide/how-elastic-load-balancing-works.html)）、IGW へのルートがあるサブネットに置きます。CloudFront を使えない HTTP の公開や、SFTP・MQTT・UDP などの公開がここに当たります
+- **internet-facing の ALB・NLB**：internet-facing の LB はノードが public IP を持ち（[ELB のドキュメント](https://docs.aws.amazon.com/elasticloadbalancing/latest/userguide/how-elastic-load-balancing-works.html)）、IGW へのルートがあるサブネットに置きます。CloudFront を使えない HTTP の公開や、SFTP、MQTT、UDP などの公開がここに当たります
 
 昔の DMZ から、サーバーを抜いて機器だけを残した形です。境界はサブネットのままです。
 
@@ -80,7 +80,7 @@ HTTP 以外の公開でも、② を避ける道はあります。[Global Accele
 
 ### ③ 集約する型：アカウントが境界になる
 
-マルチアカウント構成で、入口・出口・検査を担う VPC をネットワーク用のアカウントに集め、Transit Gateway で各アカウントの VPC とつなぐ構成です。
+マルチアカウント構成で、入口、出口、検査を担う VPC をネットワーク用のアカウントに集め、Transit Gateway で各アカウントの VPC とつなぐ構成です。
 
 - **入口 VPC**：ALB などで受け、Transit Gateway 経由で各アプリ VPC に届けます
 - **出口 VPC**：NAT GW を集約し、各アプリ VPC には IGW を置きません
@@ -106,7 +106,7 @@ FW を真ん中に置いて全部の出入りをそこで見る、という考�
 
 [VPC オリジン](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/private-content-vpc-origins.html)も [Global Accelerator](https://docs.aws.amazon.com/global-accelerator/latest/dg/secure-vpc-connections.html) も、プライベートサブネットのリソースに届けるのに、VPC に IGW がアタッチされていることを求めます。どちらのドキュメントも、IGW は「この VPC がインターネットからの通信を受けることを示すため」に必要で、ルートテーブルに IGW へのルートを書く必要はない、と説明しています。
 
-つまり IGW は、昔の「外に出るための出口」だけでなく、「この VPC はインターネットから受ける」という宣言の役割も持つようになっています。「IGW がアタッチされているか」で外との接点を把握する、という従来のチェックをそのまま使えるようにした設計とも言えます。
+つまり IGW は、昔の「外に出るための出口」だけでなく、「この VPC はインターネットから受ける」という宣言の役割も持つようになっています。Global Accelerator の[解説ブログ](https://aws.amazon.com/blogs/networking-and-content-delivery/accessing-private-application-load-balancers-and-instances-through-aws-global-accelerator/)では、IGW のアタッチを必須にした理由として、IGW の有無で境界を確認してきた組織が、その確認と監査をそのまま続けられるようにするためだと説明しています。
 
 逆に言うと、「public サブネットがない＝外と接していない」とは限りません。① の VPC も、IGW がある以上はインターネットからの入口を持っています。
 
@@ -145,3 +145,14 @@ FW を真ん中に置いて全部の出入りをそこで見る、という考�
 - [How Elastic Load Balancing works](https://docs.aws.amazon.com/elasticloadbalancing/latest/userguide/how-elastic-load-balancing-works.html)
 - [Choosing the right inspection architecture for AWS Network Firewall](https://aws.amazon.com/blogs/networking-and-content-delivery/choosing-the-right-inspection-architecture-for-aws-network-firewall/)
 - [VPC BPA basics - Amazon VPC](https://docs.aws.amazon.com/vpc/latest/userguide/security-vpc-bpa-basics.html)
+
+<!-- 公開前に削除する
+## 公開前の確認事項
+
+- 手を動かした検証がまだない。個人アカウントで ① を組み、次を確かめると記事の芯になる
+  - IGW をデタッチすると VPC オリジンが届かなくなるか
+  - VPC BPA を ingress-only で有効にすると VPC オリジンが止まるか、除外で戻るか
+  - Regional NAT GW の拡張中に、新しい AZ の通信が AZ をまたいで出るか（Flow Logs で確認）
+- Regional NAT GW の拡張中の挙動は re:Post の記事が出典。公式ドキュメントでの裏付けは未確認
+- 「② になりやすいのは EKS/ECS の Ingress コントローラー」は一般論。具体例を足すか検討
+-->
