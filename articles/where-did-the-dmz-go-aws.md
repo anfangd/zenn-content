@@ -112,6 +112,8 @@ FW を真ん中に置いて全部の出入りをそこで見る、という考�
 
 つまり IGW には 2 つの役割があります。1 つは外に出るためのルートの行き先で、① では Regional NAT GW のルートテーブルが IGW を向いています。もう 1 つは「この VPC はインターネットから受ける」という目印で、VPC オリジンや Global Accelerator はこちらの意味で IGW を求めます。外向きの通信を ③ の出口 VPC に任せ、VPC オリジンだけで受けるアプリ VPC なら、IGW は目印の役割だけを持つことになります。
 
+![IGW の 2 つの役割。左の ① では IGW が外に出るルートと受信の目印を兼ね、右の ③ と ① を重ねたアプリ VPC では目印だけになる](/images/where-did-the-dmz-go-aws/igw-two-roles.png)
+
 この扱いは新しいものではありません。Global Accelerator は 2020 年の[解説ブログ](https://aws.amazon.com/blogs/networking-and-content-delivery/accessing-private-application-load-balancers-and-instances-through-aws-global-accelerator/)で、IGW のアタッチを必須にした理由を説明しています。インターネットの通信が意図せず private サブネットに流れ込むのを防ぐためと、IGW の有無で境界を確認してきた組織が、その確認と監査を続けられるようにするためです。
 
 逆に言うと、「public サブネットがない＝外と接していない」とは限りません。① の VPC も、IGW がある以上はインターネットからの入口を持っています。
@@ -122,7 +124,9 @@ FW を真ん中に置いて全部の出入りをそこで見る、という考�
 
 ただし、[影響範囲の一覧](https://docs.aws.amazon.com/vpc/latest/userguide/security-vpc-bpa-basics.html)には、CloudFront の VPC オリジンは送受信とも止まり、Global Accelerator は VPC への受信が止まると書かれています。一覧にはモードごとの違いは書かれていません。【要確認：ingress-only モードで VPC オリジンが止まるか、除外で戻るかを個人アカウントで検証して追記】
 
-① の構成は「public サブネットがない」だけで、IGW 経由の受け口は持っています。そのため BPA を有効にするなら、VPC オリジンを使う VPC やサブネットを除外する必要があります。「public サブネットがないから BPA を入れても影響ない」と考えると、サービスが止まります。
+![BPA を入れたときの ① の通信。除外なしでは VPC オリジンへの通信が止まり、NAT GW の外向きはモードによって変わる](/images/where-did-the-dmz-go-aws/bpa-vpc-origin.png)
+
+VPC オリジンの通信は IGW をルートとしては使いませんが、BPA の対象には入ります。① の構成は public サブネットがないだけで、IGW をアタッチしてインターネットから受ける VPC であることに変わりはありません。そのため BPA を有効にするなら、VPC オリジンを使う VPC やサブネットを除外する必要があります。「public サブネットがないから BPA を入れても影響ない」と考えると、サービスが止まります。
 
 ## 試した範囲と、まだ試していない範囲
 
