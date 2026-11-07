@@ -19,9 +19,9 @@ published: false
 - 昔の DMZ は「サーバーを置く区画」でした。今の AWS では、DMZ にサーバーを置く構成はほぼなくなっています
 - 残っている形は 3 つです。**① なくす型**（エッジ＋VPC オリジン＋Regional NAT GW）、**② 小さくする型**（public サブネットにマネージドな入口と出口だけ置く）、**③ 集約する型**（入口、出口、検査の VPC をアカウントごと分ける）
 - 変わったのは「境界をどこに置くか」です。① はエッジ、② はサブネット、③ はアカウントが境界になります
-- ① でも IGW はなくなりません。ルートではなく「この VPC はインターネットから受ける」という目印として使われます
+- ① でも IGW はなくなりません。Regional NAT GW の出口であり、VPC オリジンや Global Accelerator にとっては「この VPC はインターネットから受ける」という目印でもあります
 
-## 昔の DMZ はどんな構成だったか
+## 昔の DMZ の構成
 
 基本情報技術者試験などで習う DMZ は、FW を 2 枚重ね、その間の区画に外と接するサーバーを置く構成です。
 
@@ -44,6 +44,8 @@ DMZ には、外から来る通信を受けるサーバー（Web、DNS、メー�
 
 Web、DNS、メール、踏み台は、VPC の外のマネージドサービスか、IAM で制御する仕組みに移りました。最後まで VPC の中に何かが残るのは、外向きの通信と HTTP 以外の公開です。この 2 つが、次の 3 パターンの分かれ目になります。
 
+もう 1 つ残るものがあります。IGW です。これは後の「IGW の役割」で扱います。
+
 ## 今の構成は 3 つのパターンに分かれる
 
 ![今の AWS の 3 パターン。① なくす型、② 小さくする型、③ 集約する型](/images/where-did-the-dmz-go-aws/dmz-three-patterns.png)
@@ -54,15 +56,15 @@ VPC に public サブネットを 1 つも作らない構成です。
 
 - **入口**：CloudFront と WAF で受け、[VPC オリジン](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/private-content-vpc-origins.html)でプライベートサブネットの内部 ALB に届けます。VPC オリジンは [2024 年 11 月に登場](https://aws.amazon.com/about-aws/whats-new/2024/11/amazon-cloudfront-vpc-origins/)しました。それまでは、VPC の中のオリジンを使うなら public サブネットに置き、アクセス制御を自分で作る必要がありました
 - **出口**：[Regional NAT GW](https://docs.aws.amazon.com/vpc/latest/userguide/nat-gateways-regional.html) を使います。2025 年 11 月に出た機能で、NAT GW をサブネットではなく VPC に作るので、置き場所としての public サブネットが要りません
-- **管理**：Session Manager を使います。インバウンドのポートを開ける必要がありません
+- **管理**：Session Manager を使います。インバウンドのポートを開ける必要はありません。ただし SSM への外向きの経路（NAT GW か VPC エンドポイント）は要ります
 
 昔の DMZ のリバースプロキシの役割は、CloudFront が VPC の外で担っています。境界は「VPC の外のエッジ」と「IAM」です。
 
-Regional NAT GW については、AWS も「public サブネットがなくなるので、private にしたいリソースを誤って public なサブネットに置くリスクが減る」という趣旨を説明しています（[ブログ](https://aws.amazon.com/blogs/networking-and-content-delivery/introducing-amazon-vpc-regional-nat-gateway/)）。public サブネットは、置いた瞬間に「何かを置けてしまう場所」になるので、作らずに済むなら作らない方が管理が楽です。
+Regional NAT GW の[ドキュメント](https://docs.aws.amazon.com/vpc/latest/userguide/nat-gateways-regional.html)も、public サブネットが要らなくなることで、private にしたいリソースを public に通じるサブネットに置いてしまう設定ミスが起きにくくなる、と利点に挙げています。public サブネットは、置いた瞬間に「何かを置けてしまう場所」になるので、作らずに済むなら作らない方が管理が楽です。
 
 気をつけることもあります。
 
-- Regional NAT GW が新しい AZ に広がるまで、平均 15〜20 分、最大 60 分かかります（同じブログより）。[AWS re:Post の解説](https://repost.aws/articles/AR77CnVH2zR6KjoD4SvgNVAQ/understanding-amazon-vpc-regional-nat-gateway)によると、その間の通信は既存の AZ の NAT が AZ をまたいで処理します
+- Regional NAT GW が新しい AZ に広がるまで時間がかかります。[発表ブログ](https://aws.amazon.com/blogs/networking-and-content-delivery/introducing-amazon-vpc-regional-nat-gateway/)では平均 15〜20 分、最大 60 分です。その間の通信は、既存の AZ の NAT が AZ をまたいで処理すると[ドキュメント](https://docs.aws.amazon.com/vpc/latest/userguide/nat-gateways-regional.html)に書かれています
 - サブネットに紐づかないので、サブネット単位の設定は効きません
 
 ### ② 小さくする型：public サブネットに機器だけ置く
@@ -70,7 +72,7 @@ Regional NAT GW については、AWS も「public サブネットがなくな�
 public サブネットは残すものの、置くのはマネージドな入口と出口の機器だけで、EC2 は置かない構成です。
 
 - **zonal NAT GW**：今までの NAT GW です。AZ ごとに public サブネットに置きます
-- **internet-facing の ALB・NLB**：internet-facing の LB はノードが public IP を持ち（[ELB のドキュメント](https://docs.aws.amazon.com/elasticloadbalancing/latest/userguide/how-elastic-load-balancing-works.html)）、IGW へのルートがあるサブネットに置きます。CloudFront を使えない HTTP の公開や、SFTP、MQTT、UDP などの公開がここに当たります
+- **internet-facing の ALB と NLB**：internet-facing の LB はノードが public IP を持ち（[ELB のドキュメント](https://docs.aws.amazon.com/elasticloadbalancing/latest/userguide/how-elastic-load-balancing-works.html)）、IGW へのルートがあるサブネットに置きます。CloudFront を使えない HTTP の公開や、SFTP、MQTT、UDP などの公開がここに当たります
 
 昔の DMZ から、サーバーを抜いて機器だけを残した形です。境界はサブネットのままです。
 
@@ -98,23 +100,27 @@ FW を真ん中に置いて全部の出入りをそこで見る、という考�
 - HTTP 以外の公開や、Regional NAT GW を使えない事情があるところだけ ② にする
 - 組織全体で出入りをまとめて検査したい場合は、③ を土台にして、その上で各アプリを ① の形にする
 
+ただし ③ と ① を重ねると、VPC オリジンのためにアプリ VPC にも IGW が戻ってきます。「アプリ VPC には IGW を置かない」を監査のルールにしている組織では、VPC オリジンを使う VPC をどう例外にするかを先に決める必要があります。
+
 【ハジメが書く：個人的にはどれを基本にするか、その理由】
 
-## IGW の意味が変わった
+## IGW の役割
 
 ① の構成を作ると、「public サブネットはないのに IGW は要る」という状態になります。
 
 [VPC オリジン](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/private-content-vpc-origins.html)も [Global Accelerator](https://docs.aws.amazon.com/global-accelerator/latest/dg/secure-vpc-connections.html) も、プライベートサブネットのリソースに届けるのに、VPC に IGW がアタッチされていることを求めます。どちらのドキュメントも、IGW は「この VPC がインターネットからの通信を受けることを示すため」に必要で、ルートテーブルに IGW へのルートを書く必要はない、と説明しています。
 
-つまり IGW は、昔の「外に出るための出口」だけでなく、「この VPC はインターネットから受ける」という宣言の役割も持つようになっています。Global Accelerator の[解説ブログ](https://aws.amazon.com/blogs/networking-and-content-delivery/accessing-private-application-load-balancers-and-instances-through-aws-global-accelerator/)では、IGW のアタッチを必須にした理由として、IGW の有無で境界を確認してきた組織が、その確認と監査をそのまま続けられるようにするためだと説明しています。
+つまり IGW には 2 つの役割があります。1 つは外に出るためのルートの行き先で、① では Regional NAT GW のルートテーブルが IGW を向いています。もう 1 つは「この VPC はインターネットから受ける」という目印で、VPC オリジンや Global Accelerator はこちらの意味で IGW を求めます。外向きの通信を ③ の出口 VPC に任せ、VPC オリジンだけで受けるアプリ VPC なら、IGW は目印の役割だけを持つことになります。
+
+この扱いは新しいものではありません。Global Accelerator は 2020 年の[解説ブログ](https://aws.amazon.com/blogs/networking-and-content-delivery/accessing-private-application-load-balancers-and-instances-through-aws-global-accelerator/)で、IGW のアタッチを必須にした理由を説明しています。インターネットの通信が意図せず private サブネットに流れ込むのを防ぐためと、IGW の有無で境界を確認してきた組織が、その確認と監査を続けられるようにするためです。
 
 逆に言うと、「public サブネットがない＝外と接していない」とは限りません。① の VPC も、IGW がある以上はインターネットからの入口を持っています。
 
-## ハマりどころ：VPC Block Public Access は VPC オリジンも止める
+## VPC Block Public Access と VPC オリジン
 
 「public サブネットを作らない」を強制したいなら、[VPC Block Public Access（BPA）](https://docs.aws.amazon.com/vpc/latest/userguide/security-vpc-bpa.html)が候補になります。IGW を通るインターネットの通信を、アカウントやリージョン単位でまとめて止める機能です。
 
-ただし、[影響範囲の一覧](https://docs.aws.amazon.com/vpc/latest/userguide/security-vpc-bpa-basics.html)を見ると、CloudFront の VPC オリジンも Global Accelerator も、BPA の対象として通信が止まると書かれています。inbound だけを止める ingress-only モードでも、VPC オリジンへの通信は止まります。
+ただし、[影響範囲の一覧](https://docs.aws.amazon.com/vpc/latest/userguide/security-vpc-bpa-basics.html)には、CloudFront の VPC オリジンは送受信とも止まり、Global Accelerator は VPC への受信が止まると書かれています。一覧にはモードごとの違いは書かれていません。【要確認：ingress-only モードで VPC オリジンが止まるか、除外で戻るかを個人アカウントで検証して追記】
 
 ① の構成は「public サブネットがない」だけで、IGW 経由の受け口は持っています。そのため BPA を有効にするなら、VPC オリジンを使う VPC やサブネットを除外する必要があります。「public サブネットがないから BPA を入れても影響ない」と考えると、サービスが止まります。
 
@@ -130,7 +136,11 @@ FW を真ん中に置いて全部の出入りをそこで見る、という考�
 
 ## 関連する記事
 
-「public サブネットをなくす」構成そのものは、すでに次の記事で詳しく紹介されています。
+IGW が必要な理由や、BPA と VPC オリジンの関係は、前に書いた記事でも扱っています。この記事は、それを DMZ の役割の行き先という切り口で整理し直し、出口側も Regional NAT GW で public サブネットが要らなくなった点を足したものです。
+
+- [AWSでWebリクエストを受ける8パターンと「オリジンを裸にしない」設定プラクティス](https://zenn.dev/anfangd/articles/aws-web-ingress-origin-protection)
+
+「public サブネットをなくす」構成そのものは、次の記事でも詳しく紹介されています。
 
 - [Amazon VPC からパブリックサブネットを無くしたい!（サーバーワークス）](https://blog.serverworks.co.jp/no-public-subnet)
 - [パブリックサブネットレスなVPCにECS Express Mode環境を構築してみた（DevelopersIO）](https://dev.classmethod.jp/articles/ecs-express-mode-public-subnet-less/)
@@ -153,6 +163,7 @@ FW を真ん中に置いて全部の出入りをそこで見る、という考�
   - IGW をデタッチすると VPC オリジンが届かなくなるか
   - VPC BPA を ingress-only で有効にすると VPC オリジンが止まるか、除外で戻るか
   - Regional NAT GW の拡張中に、新しい AZ の通信が AZ をまたいで出るか（Flow Logs で確認）
-- Regional NAT GW の拡張中の挙動は re:Post の記事が出典。公式ドキュメントでの裏付けは未確認
+- サーバーワークスの記事のリンク先が実在するか確認する（レビュー時に取得できなかった）
+- 【はじめに】には、8 パターン記事のあとで、なぜ DMZ の切り口で書き直すのかを入れると続編として読める
 - 「② になりやすいのは EKS/ECS の Ingress コントローラー」は一般論。具体例を足すか検討
 -->
