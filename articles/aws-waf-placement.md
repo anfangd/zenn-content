@@ -1,5 +1,5 @@
 ---
-title: "AWS WAF をどこに置き、どう組むか：エッジとリージョンの使い分け・注意点・ルール設計"
+title: "AWS WAF、どこに置いてどう組んでいますか？ エッジとリージョンの使い分けと注意点"
 emoji: "🧱"
 type: "tech" # tech: 技術記事 / idea: アイデア
 topics: ["AWS","WAF","CloudFront","ALB","Security"]
@@ -26,6 +26,34 @@ https://zenn.dev/anfangd/articles/aws-web-ingress-origin-protection
 - ボディを検査できるサイズは **ALB が 8 KB 固定、CloudFront は既定 16 KB（最大 64 KB）** です
 - ルールは「早い段階で攻撃を減らす漏斗型」の順に並べ、**Count モードで確かめてから Block** にします
 
+## WAF の歩み
+
+AWS WAF は 2015 年 10 月に、**CloudFront 専用のサービスとして**登場しました。ALB に付けられるようになったのは 2016 年 12 月です。古くから動いている環境で「WAF は CloudFront にだけ付いている」構成を見かけるのは、こうした経緯もあります。
+
+| 時期 | 出来事 |
+|---|---|
+| 2015 年 10 月 | AWS WAF が登場。対応は CloudFront のみ |
+| 2016 年 12 月 | ALB に対応 |
+| 2017 年 6 月 | レートベースルールが使えるように |
+| 2018 年 11 月 | API Gateway に対応。それまでは自前の CloudFront を前段に置く必要があった |
+| 2019 年 11 月 | 新しい AWS WAF（wafv2 API）と AWS Managed Rules が登場。WCU の考え方が入り、旧版は「AWS WAF Classic」に |
+| 2020 年 11 月 | ALB で WAF が使えないときの挙動（`waf.fail_open.enabled`）を設定できるように |
+| 2021 年 4 月 | Bot Control、ラベル、スコープダウンが登場 |
+| 2024 年 2 月 | ALB のコンソールからワンクリックで WAF を有効にできるように |
+| 2025 年 6 月 | Anti-DDoS マネージドルールグループが登場 |
+| 2025 年 9 月 | AWS WAF Classic のサポートが終了 |
+
+- [Introducing AWS WAF (2015)](https://aws.amazon.com/about-aws/whats-new/2015/10/introducing-aws-waf/)
+- [AWS WAF is now available on the Application Load Balancer (2016)](https://aws.amazon.com/about-aws/whats-new/2016/12/AWS-WAF-now-available-on-Application-Load-Balancer/)
+- [Updates before 2018 - AWS WAF Developer Guide](https://docs.aws.amazon.com/waf/latest/developerguide/doc-history-early-changes.html)
+- [Amazon API Gateway adds support for AWS WAF (2018)](https://aws.amazon.com/blogs/compute/amazon-api-gateway-adds-support-for-aws-waf/)
+- [Introducing AWS Managed Rules for AWS WAF (2019)](https://aws.amazon.com/about-aws/whats-new/2019/11/introducing-aws-managed-rules-for-aws-waf/)
+- [Document history for Application Load Balancers](https://docs.aws.amazon.com/elasticloadbalancing/latest/application/doc-history.html)
+- [Announcing AWS WAF Bot Control (2021)](https://aws.amazon.com/about-aws/whats-new/2021/04/announcing-aws-waf-bot-control/)
+- [AWS Application Load Balancer announces one-click WAF integrations (2024)](https://aws.amazon.com/about-aws/whats-new/2024/02/aws-application-load-balancer-one-click-waf-integrations/)
+- [AWS WAF now supports automatic application layer DDoS protection (2025)](https://aws.amazon.com/about-aws/whats-new/2025/06/aws-waf-automatic-application-layer-ddos-protection/)
+- [Migrating your rules from AWS WAF Classic to the new AWS WAF](https://aws.amazon.com/blogs/security/migrating-rules-from-aws-waf-classic-to-new-aws-waf/)
+
 ## WAF の位置付け
 
 VPC オリジン・OAC・セキュリティグループは「誰がオリジンに届くか（経路）」を決めるものです。WAF は層が違い、「届いたリクエストの中身を検査する」ものです。
@@ -42,11 +70,15 @@ WAF の web ACL を関連付けられるのは、CloudFront、ALB、API Gateway 
 
 逆に、**NLB、Global Accelerator、S3、Lambda 関数 URL、API Gateway の HTTP API には直接付けられません**。これらを WAF で守るなら、前段に CloudFront を置くか、後段の ALB に付けます。
 
+![WAF を付けられる場所・付けられない場所](/images/aws-waf-placement/attach-targets.png)
+
 - [Associating or disassociating protection with an AWS resource - AWS WAF](https://docs.aws.amazon.com/waf/latest/developerguide/web-acl-associating-aws-resource.html)
 
 ### エッジ（CloudFront）に置くのが基本
 
 AWS の WAF 実装ガイドラインでは、インターネットに公開する Web アプリケーションには、制約がない限り **CloudFront と組み合わせて WAF を置く** ことを推奨しています。理由は次のとおりです。
+
+![エッジに WAF を置く理由](/images/aws-waf-placement/edge-first.png)
 
 - CloudFront の WAF の処理能力は CloudFront の拠点の規模に合わせてスケールし、リージョンの WAF の容量制約を受けません
 - CloudFront 自体が不正な HTTP リクエストや L3/L4 の攻撃を止めるので、WAF はアプリ層の検査に集中できます
@@ -58,7 +90,7 @@ AWS の WAF 実装ガイドラインでは、インターネットに公開す�
 - ②（公開 ALB）のように、エッジを通らない経路が論理的に残っている場合の保険
 - ⑦（Global Accelerator）や ⑧（公開 ALB 直受け）のように、そもそも CloudFront がない場合（ALB 側が唯一の WAF になります）
 
-- [Guidelines for Implementing AWS WAF (Whitepaper)](https://docs.aws.amazon.com/whitepapers/latest/guidelines-for-implementing-aws-waf/guidelines-for-implementing-aws-waf.html)
+- [AWS WAF integration design - Guidelines for Implementing AWS WAF (Whitepaper)](https://docs.aws.amazon.com/whitepapers/latest/guidelines-for-implementing-aws-waf/aws-waf-integration-design.html)
 - [Amazon CloudFront - AWS Best Practices for DDoS Resiliency](https://docs.aws.amazon.com/whitepapers/latest/aws-best-practices-ddos-resiliency/cloudfront.html)
 
 ### 構成パターンごとの置き場所
@@ -83,7 +115,7 @@ https://zenn.dev/anfangd/articles/aws-web-ingress-origin-protection
 
 **1. ALB 側の WAF には、クライアントの IP ではなく CloudFront の IP が見える**
 
-WAF は既定で、リクエストの送信元 IP を使います。プロキシやロードバランサーを経由すると、それは最後のプロキシのアドレスになります。そのため CloudFront の背後にある ALB の WAF で、IP セット、国（geo）、レートベースのルールを使うには、`X-Forwarded-For` などを使う forwarded IP の設定が必要です。
+CloudFront の後ろにいる ALB から見ると、通信してくる相手は利用者ではなく CloudFront です。WAF も既定ではこの接続元の IP で判定するので、何もしないと全員が CloudFront の IP に見えてしまいます。そのため ALB の WAF で、IP セット、国（geo）、レートベースのルールを使うには、`X-Forwarded-For` などを使う forwarded IP の設定が必要です。
 
 ここで注意したいのが次の 2 点です。
 
@@ -93,6 +125,8 @@ WAF は既定で、リクエストの送信元 IP を使います。プロキシ
 なお、Bot Control と Anti-DDoS のマネージドルールグループは、CloudFront などの CDN 経由のトラフィックを自動で認識し、元のクライアント IP を使ってくれます。
 
 結論として、**IP ベースのルールはエッジ（CloudFront）の WAF に寄せる** のが安全です。
+
+![ALB 側の WAF に見える IP と X-Forwarded-For](/images/aws-waf-placement/forwarded-ip.png)
 
 - [Using forwarded IP addresses in AWS WAF](https://docs.aws.amazon.com/waf/latest/developerguide/waf-rule-statement-forwarded-ip-address.html)
 
@@ -112,21 +146,15 @@ WAF は既定で、リクエストの送信元 IP を使います。プロキシ
 
 WAF の内部エラーで判定が遅れた場合、**CloudFront は通常リクエストを通し、リージョンのサービスは通常拒否します**。エッジの WAF は可用性寄り（fail-open 寄り）、ALB の WAF は fail-closed 寄りです。ALB には `waf.fail_open.enabled`（既定 false）の属性もあります。
 
+![WAF の内部エラー時の挙動](/images/aws-waf-placement/failure-behavior.png)
+
 - [Configuring protection in AWS WAF](https://docs.aws.amazon.com/waf/latest/developerguide/web-acl.html)
 
 ## ルールの組み方
 
-DDoS 耐性のホワイトペーパーは、**早い段階で攻撃を減らす「漏斗型」** の順番を推奨しています。
+DDoS 耐性のホワイトペーパーは、**早い段階で攻撃を減らす「漏斗型」** の順番を推奨しています。上ほど判定が安く、下ほど中身を詳しく見るルールです。
 
-1. 許可する IP（Allow）
-2. ブロックする IP（Block）
-3. 国による制限（geo）
-4. Anti-DDoS マネージドルール
-5. Amazon IP reputation list
-6. 全体にかけるレートベースルール（高めの閾値）
-7. 用途別のレートベースルール（API・URI・JA3/JA4 など、低めの閾値）
-8. Core rule set
-9. Bot Control
+![ルールの漏斗型の順番](/images/aws-waf-placement/rule-funnel.png)
 
 レートベースルールについては、全体に高めの閾値をかけたうえで、キャッシュできない動的なエンドポイントやログインなどの重い処理には、より低い閾値のルールを別に足すのが推奨です。
 
@@ -137,6 +165,8 @@ DDoS 耐性のホワイトペーパーは、**早い段階で攻撃を減らす�
 - [Integrations for your Application Load Balancer](https://docs.aws.amazon.com/elasticloadbalancing/latest/application/load-balancer-integrations.html)
 
 ## 運用
+
+![ルールを Block にするまでの流れ](/images/aws-waf-placement/count-to-block.png)
 
 - **Count モードで試してから Block にする**：ステージングで調整したあと、本番トラフィックでも Count モードで影響を確認してから有効化します（[Testing and tuning your AWS WAF protections](https://docs.aws.amazon.com/waf/latest/developerguide/web-acl-testing.html)）
 - **ログを有効にする**：誤検知の調査や攻撃の分析には WAF のログが欠かせません。サンプリングされたリクエスト（直近 3 時間）だけでは足りないことが多いです
@@ -208,10 +238,6 @@ fields @timestamp, httpRequest.clientIp, httpRequest.uri, terminatingRuleId, act
 | sort blocked desc
 ```
 
-## まとめ
+## おわりに
 
-- WAF は中身を検査する層。経路を絞る層（VPC オリジン / OAC / SG）と組み合わせて初めて効きます
-- 置き場所はエッジ（CloudFront）が基本。リージョンの WAF は、アプリ固有ルールを分けたいとき、エッジを通らない経路があるとき、CloudFront がない構成のときに使います
-- IP ベースのルールはエッジに寄せる、ボディの検査上限を意識する、内部エラー時の挙動の違いを知っておく
-- ルールは漏斗型に並べ、Count モードで確かめてから有効化し、ログで調整し続けます
-
+Terraform でインフラを管理していると、WAF のルールを少し変えただけで全部変わったように見えるのが、いつも面倒だなと思っています。
