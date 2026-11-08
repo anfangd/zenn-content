@@ -73,6 +73,8 @@ Regional NAT GW の[ドキュメント](https://docs.aws.amazon.com/vpc/latest/u
 
 ただし、VPC の中のデータベースなどに届けたいなら、egress network connector で VPC につなぐ必要があります。egress network connector を使えるのは `HomeRegion` タイプのエンドポイントだけで、複数リージョンに振り分けるエンドポイントでは使えません（[ドキュメント](https://docs.aws.amazon.com/lambda/latest/dg/web-functions-networking.html)）。複数リージョンに分散しつつ VPC の中のデータを使いたいなら、つなぎ方を別に考える必要があります。
 
+もう 1 つ気をつけたいのは、connector を付けると外向きの通信が VPC を通ることです。インターネットに出るには、connector のサブネットから NAT GW へのルートが必要になります。NAT GW を持たずに済むのは、connector を使わない場合だけです。なお、connector で変わるのは出ていく側だけで、受ける側のエンドポイントはどちらの場合も VPC の外にあり、インターネットから届きます。
+
 アクセスの多くが海外から来るサイトで、VPC オリジンの構成からこの形に移った事例が、JAWS festa 2026 で発表されています（関連する記事を参照）。CloudFront からの守り方は、[9 パターン記事](https://zenn.dev/anfangd/articles/aws-web-ingress-origin-protection)の ⑨ にまとめました。
 
 ### ② 小さくする型では、public サブネットに機器だけを置く
