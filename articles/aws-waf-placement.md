@@ -68,7 +68,7 @@ VPC オリジン・OAC・セキュリティグループは「誰がオリジン�
 
 WAF の web ACL を関連付けられるのは、CloudFront、ALB、API Gateway の REST API、AppSync、Cognito ユーザープール、App Runner、Verified Access、Amplify、Bedrock AgentCore Gateway です。CloudFront 用は **Global スコープ（us-east-1 で作成）**、ALB や API Gateway などは **リソースと同じリージョンの Regional スコープ** になります。CloudFront に関連付けた web ACL は、他の種類のリソースには関連付けられません。
 
-逆に、**NLB、Global Accelerator、S3、Lambda 関数 URL、API Gateway の HTTP API には直接付けられません**。これらを WAF で守るなら、前段に CloudFront を置くか、後段の ALB に付けます。
+逆に、**NLB、Global Accelerator、S3、Lambda 関数 URL、Lambda Web Functions、API Gateway の HTTP API には直接付けられません**。これらを WAF で守るなら、前段に CloudFront を置くか、後段の ALB に付けます。
 
 ![WAF を付けられる場所・付けられない場所](/images/aws-waf-placement/attach-targets.png)
 
@@ -105,9 +105,10 @@ AWS の WAF 実装ガイドラインでは、インターネットに公開す�
 | ⑥ Private API | CloudFront（Global） | 経路は①と同じ |
 | ⑦ Global Accelerator | ALB（Regional） | GA には付けられない。クライアント IP が保持されるので、IP ベースのルールがそのまま効く |
 | ⑧ 公開 ALB 直受け | ALB（Regional）※必須 | 唯一の L7 防御。Shield Advanced も検討 |
+| ⑨ Lambda Web Functions（OAC） | CloudFront（Global） | エンドポイントには付けられない |
 
 
-パターン①〜⑧ の構成そのものは、こちらの記事で解説しています。
+パターン①〜⑨ の構成そのものは、こちらの記事で解説しています。
 
 https://zenn.dev/anfangd/articles/aws-web-ingress-origin-protection
 

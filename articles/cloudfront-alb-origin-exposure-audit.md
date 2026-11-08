@@ -383,6 +383,8 @@ resource "aws_lb" "web_internal" {
 
 切り戻しは、昇格前ならステージングへの振り分けを止めるだけで済みます。昇格後は、旧 ALB が残っている間なら、プライマリのオリジンを旧 ALB に戻せばすぐに戻せます。旧 ALB を消すのは、切り戻す可能性がなくなってからにしましょう。
 
+VPC オリジンに移ると、2026 年 7 月のように VPC オリジンそのものが止まったときの備えが別に必要になります。オリジングループのセカンダリと、切り替えるまでの待ち時間（既定で最大 30 秒）は、移行と一緒に決めておきます。旧 ALB を消すか、閉じた状態で迂回路として残すかも、このときに決めます。決めておくことは[前の記事の ①](https://zenn.dev/anfangd/articles/aws-web-ingress-origin-protection) にまとめました。
+
 - [Restrict access with VPC origins - Amazon CloudFront](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/private-content-vpc-origins.html)
 - [Use CloudFront continuous deployment to safely test CDN configuration changes](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/continuous-deployment.html)
 - [Amazon CloudFront のパブリックオリジンからプライベート VPC オリジンへの移行（AWS ブログ、2026 年 4 月）](https://aws.amazon.com/jp/blogs/news/migrate-amazon-cloudfront-public-origins-to-private-vpc-origins)
@@ -422,7 +424,7 @@ conftest test tfplan.json --policy policy/
 
 | 仕組み | 得意なこと | 抜けるところ |
 |---|---|---|
-| plan に対する Rego | 作る前に止められる | ALB・SG・CloudFront が**別の state や別のリポジトリ**にあると、組み合わせが見えない。コンソールでの手作業の変更や、Terraform 管理外の古い環境も見えない |
+| plan に対する Rego | 作る前に止められる | ALB・SG・CloudFront が**別の state や別のリポジトリ**にあると、組み合わせが見えない。コンソールでの手作業の変更や、Terraform 管理外の古い環境も見えない。ECS Express Mode のように AWS が代わりに作る ALB も plan には出てこない |
 | 構成の突き合わせ（1 段目） | 動いている環境を安く何度でも見られる | 「プレフィックスリストが入っていれば CloudFront の裏にいるつもり」という推定に頼っている。WAF で照合している秘密ヘッダーは読み切れない |
 | ネットワーク到達性（2 段目） | 公開のままの ALB はマネージドに拾える | 自分の CloudFront と他人の CloudFront を区別できない |
 | 攻撃者視点のテスト（3 段目） | 本当に閉じているかを確定できる | テスト対象として登録したホスト名しか見ない |
@@ -433,6 +435,8 @@ conftest test tfplan.json --policy policy/
 - **検知はマネージドに寄せる**：Network Scanning のように、誰も何も書かなくても動くものを先に有効にします
 - **E2E は共通の仕組みにする**：攻撃者役のテストを各チームに書かせるのではなく、基盤チームが共通の仕組みとして用意し、各チームはホスト名を登録するだけにします
 - **古い環境ほど重点的に見る**：穴が開きやすいのは、標準ができる前に作られた環境です
+
+同じ形の穴は ALB 以外にもあります。Lambda Web Functions のエンドポイントは、認証の種類が `ApplicationManaged` のままだと、CloudFront の裏に置いても直接届きます。こちらは SCP の条件キー `lambda:Request/WebFunctionAuthType` で、作る段階から止められます（[AWS ブログ](https://aws.amazon.com/blogs/compute/exploring-aws-lambda-web-functions-for-building-web-applications/)）。
 
 そして、どの仕組みも「何がどこにあるか」が分かっていないと対象から漏れます。**アカウントやリポジトリの棚卸し**が、実は一番の抜けになりがちです。
 
