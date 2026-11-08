@@ -137,7 +137,7 @@ CT ログで分かるのはほぼドメイン名だけですが、名前から D
 
 - [Requiring HTTPS for communication between CloudFront and your custom origin](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/using-https-cloudfront-to-custom-origin.html)
 
-## 実務で効くこと
+## 取れる対策
 
 - **予防**：DNS に CAA レコードを置き、自ドメインの証明書を発行できる CA を限定します（ACM を使うなら Amazon 系の CA を許可します）
 - **検知**：CT ログを監視し、身に覚えのない証明書が発行されていないかを確認します。ACM のドキュメントでも、ログの監視が勧められています
@@ -169,8 +169,8 @@ aws acm list-certificates --region us-east-1 \
 
 ## 最近の動き
 
-- CT ログの実装は、RFC 6962 方式から、静的ファイルで配信する「タイル型」（static-ct-api）へ移りつつあります。Chrome では 2025年11月に、「少なくとも 1 つは RFC 6962 方式のログの SCT を含める」という要件を外すかどうかの議論が始まっています（[ct-policy](https://groups.google.com/a/chromium.org/g/ct-policy/c/amrnTiDFdwM)）
-- Chrome は 2026年3月に、OCSP 経由で渡される SCT のサポートを外す方針を出しています（[ct-policy](https://groups.google.com/a/chromium.org/g/ct-policy/c/6ewCgspeyZE)）。現在の主流は、証明書に SCT を埋め込む方式です
+- CT ログの実装は、RFC 6962 方式から、静的ファイルで配信する「タイル型」（static-ct-api）へ移りつつあります。Chrome は 2026年4月15日に、「少なくとも 1 つは RFC 6962 方式のログの SCT を含める」という要件を撤廃しました。これで、タイル型ログの SCT だけでも Chrome の CT ポリシーを満たせます（[ct-policy](https://groups.google.com/a/chromium.org/g/ct-policy/c/IXPT4r1CPdE)）。ただし、ほかのブラウザの要件は Chrome と異なる場合があります
+- Chrome は 2026年5月の Chrome 148 から、OCSP 経由で渡される SCT を CT ポリシーの判定に数えなくなりました（[ct-policy](https://groups.google.com/a/chromium.org/g/ct-policy/c/6ewCgspeyZE)）。SCT を渡す方法は、証明書に埋め込む方式と TLS ハンドシェイクで渡す方式の 2 つで、主流は証明書に埋め込む方式です
 
 ## おわりに
 
