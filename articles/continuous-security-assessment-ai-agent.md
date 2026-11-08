@@ -3,7 +3,7 @@ title: "本番に出したあとのセキュリティ、いつ確かめていま
 emoji: "🔁"
 type: "tech" # tech: 技術記事 / idea: アイデア
 topics: ["AWS","Security","SRE","AIエージェント","Compliance"]
-published: false
+published: true
 ---
 
 :::message
