@@ -19,13 +19,14 @@ published: false
 1. **ワークロードを本番に出す前に、設計やチェックのルールはありますか？**
 2. **リリースしたあとも、機能追加や保守で構成は変わり続けます。定期的に検査や評価をしていますか？**
 
-1 つ目は、リリース前のチェックリストや脅威分析、脆弱性診断といった形で、何かしらあるかもしれません。では 2 つ目はどうでしょう。「年に 1 回のアセスメント」で止まっていませんか？
+1 つ目は、リリース前のチェックリストや脅威分析、脆弱性診断といった形で、何かしらあるかもしれません。では 2 つ目はどうでしょう。「年に 1 回など、決まった時期のアセスメント」で止まっていませんか？
 
 この記事では、まず一般的にはどういう枠組みでチェックが行われているのかを、公開されているフレームワークで整理します。そのうえで、年 1 回の評価と評価の間に入る変更を、AI エージェントを使って週 1 回・月 1 回の検査で埋める方法を考えます。
 
 ## TL;DR
 
-- セキュリティのチェックは、**スタンダード（何を守るか）**、**リリース前のレビュー**、**定期的なアセスメント**の 3 つで構成されることが多いです。弱いのは、リリース後から次のアセスメントまでの「見えない期間」です
+- セキュリティの基準は、業務端末や営業情報まで含む**全社の情報セキュリティ基準**と、開発・提供するシステム向けの**システムのセキュリティ基準**に分かれます。この記事は後者を扱います
+- システムのチェックは、**システムのセキュリティ基準（何を守るかを決めたもの）**、**リリース前のレビュー**、**定期的なアセスメント**の 3 つで構成されることが多いです。弱いのは、リリース後から次のアセスメントまでの「見えない期間」です
 - NIST SP 800-137 は、継続的モニタリングの「継続的」を**リスクに基づく判断を支えられるだけの頻度**と定義しています。毎日でなくてもいいけれど、年 1 回が十分とは限りません
 - 項目を「**何を証拠に判断するか**」で、設定・文書・運用の実態の 3 つに分けると、自動化できる範囲と頻度がはっきりします
 - **決定的なルール**（Config ルール、Security Hub、Rego）は変更のたびに回し、**AI エージェント**は定期的にリソースや文書をまたいで探索させます。見つかった新しいパターンはルールに落として固めます
@@ -35,24 +36,29 @@ published: false
 
 ![セキュリティのチェックはどこで行われているか](/images/continuous-security-assessment-ai-agent/assessment-gates.png)
 
-### 何を守るかを決める：セキュリティスタンダード
+### 何を守るかは、全社の基準とシステムの基準の 2 段で決める
 
-あなたの組織には、情報セキュリティの基本方針と、その下で「何を、どのレベルで求めるか」を具体的に決めた基準（ここではセキュリティスタンダードと呼びます）がありますか？
+あなたの組織には、情報セキュリティの基本方針と、その下で「何を、どのレベルで求めるか」を具体的に決めた基準がありますか？
 
-あるとしたら、その対象は作ったシステムだけでしょうか。システムの設計、運用体制、社員の端末なども含めて、どのレベルを求めるかが決まっているでしょうか。
+ここで分けて考えたいのが、基準の範囲と抽象度です。
 
-一般的には、基本方針の下にスタンダードを置き、さらにその下に手順・ガイドライン・チェックリストを置く、という階層で整理されます。上ほど抽象的で変わりにくく、下ほど具体的で変わりやすいものです。
+- **全社の情報セキュリティ基準**：会社が扱う情報全体が対象です。業務端末の使い方、営業資料や顧客情報の取り扱い、入退室、教育なども含みます。システムを作らない部署にも関わるので、抽象度は高めです
+- **システムのセキュリティ基準**：開発して提供するシステムやサービスが満たすべき水準です。公開経路の制限、暗号化、ログ、権限、脆弱性への対応などを、もう一段具体的に決めます
+
+全社の基準が会社として何を守るかを決め、システムのセキュリティ基準はそれを開発とサービス提供の文脈に落としたもの、という関係です。その下に、手順・ガイドライン・チェックリストが続きます。上ほど抽象的で変わりにくく、下ほど具体的で変わりやすいものです。
+
+この記事が扱うのは、**システムのセキュリティ基準**と、それを満たしているかの確認です。業務端末や営業情報の扱いも大事ですが、確かめ方が違うので、ここでは扱いません。
 
 ![セキュリティの決まりごとの階層と、その対象](/images/continuous-security-assessment-ai-agent/policy-hierarchy.png)
 
-まだスタンダードがない場合でも、ゼロから考える必要はありません。公開されているフレームワークの中では、次のようなものが土台になります。
+まだシステムのセキュリティ基準がない場合でも、ゼロから考える必要はありません。公開されているフレームワークを、主にどの層の土台になるかで分けると次のようになります。
 
-| フレームワーク | 位置付け |
-|---|---|
-| ISO/IEC 27001:2022 | 情報セキュリティマネジメントシステムの要求事項。附属書 A に、組織・人・物理・技術の 4 つのテーマで 93 の管理策がある |
-| NIST Cybersecurity Framework（CSF）2.0 | 2024 年 2 月公開。Govern・Identify・Protect・Detect・Respond・Recover の 6 つの機能で、サイバーセキュリティのリスク管理を整理する |
-| AWS Well-Architected フレームワークのセキュリティの柱 | AWS 上の設計で何を考えるべきかの観点 |
-| OWASP ASVS 5.0 | 2025 年 5 月公開。Web アプリケーションのセキュリティ要件を検証できる形で並べたもの |
+| フレームワーク | 主に土台になる層 | 位置付け |
+|---|---|---|
+| ISO/IEC 27001:2022 | 全社 | 情報セキュリティマネジメントシステムの要求事項。附属書 A に、組織・人・物理・技術の 4 つのテーマで 93 の管理策がある |
+| NIST Cybersecurity Framework（CSF）2.0 | 全社 | 2024 年 2 月公開。Govern・Identify・Protect・Detect・Respond・Recover の 6 つの機能で、サイバーセキュリティのリスク管理を整理する |
+| AWS Well-Architected フレームワークのセキュリティの柱 | システム | AWS 上の設計で何を考えるべきかの観点 |
+| OWASP ASVS 5.0 | システム | 2025 年 5 月公開。Web アプリケーションのセキュリティ要件を検証できる形で並べたもの |
 
 CSF 2.0 では、Govern・Identify・Protect・Detect は**継続的に行うもの**とされています。つまり、どのフレームワークも「一度確認すれば終わり」という前提には立っていません。
 
@@ -60,19 +66,25 @@ CSF 2.0 では、Govern・Identify・Protect・Detect は**継続的に行うも
 - [OWASP Application Security Verification Standard](https://asvs.owasp.org/)
 - [Security pillar - AWS Well-Architected Framework](https://docs.aws.amazon.com/wellarchitected/latest/security-pillar/welcome.html)
 
-### 本番に出す前：プロダクションレディネスレビュー
+### 本番に出す前に、PRR で確かめる
 
 リリース前のチェックとしてよく知られているのが、Google の SRE 本にある **プロダクションレディネスレビュー（PRR）** です。サービスが本番運用に求められる基準を満たしているかを、チェックリストを使って確かめるプロセスです。SRE 本では、アーキテクチャと依存関係、監視、緊急対応、キャパシティ、変更管理、性能といった観点を挙げています。
 
-セキュリティの観点では、ここに脅威分析や脆弱性診断が加わるのが一般的です。
+セキュリティの観点では、ここに脅威分析や脆弱性診断が加わるのが一般的です。たとえば Microsoft SDL は、リリース前に脅威モデルを見直すことと、ペネトレーションテストを含むセキュリティテストを実践項目に挙げています。OWASP SAMM も、脅威モデリングとリリース前の手動ペネトレーションテストを成熟度モデルに含めています。
+
+- [Microsoft Security Development Lifecycle (SDL) - Microsoft Service Assurance](https://learn.microsoft.com/en-us/compliance/assurance/assurance-microsoft-security-development-lifecycle)
+- [Threat Assessment - OWASP SAMM](https://owaspsamm.org/model/design/threat-assessment/)
+- [Security Testing - OWASP SAMM](https://owaspsamm.org/model/verification/security-testing/)
 
 PRR で興味深いのは、SRE 本が PRR のあとに **継続的な改善** のフェーズを置いていることです。SRE 本は、稼働中のサービスは新機能の要望や依存先の変化、技術の更新によって変わり続ける、と書いています。レビューを一度通れば終わりではなく、通った状態を保つために手を入れ続ける必要がある、ということです。
 
 - [The Evolving SRE Engagement Model - Google SRE Book](https://sre.google/sre-book/evolving-sre-engagement-model/)
 
-### 本番に出したあと：定期的なアセスメント
+### 本番に出したあとは、定期的なアセスメントで確かめる
 
-リリース後は、年 1 回などの定期的なアセスメントで、スタンダードを満たし続けているかを確認するのが一般的です。
+リリース後は、年 1 回などの定期的なアセスメントで、システムのセキュリティ基準を満たし続けているかを確認するのが一般的です。たとえば PCI DSS は、ペネトレーションテストを少なくとも 12 か月に 1 回、加えて大きな変更のあとに行うよう求めています（要件 11.4）。
+
+- [PCI DSS v4.0.1 - PCI Security Standards Council Document Library](https://www.pcisecuritystandards.org/document_library/)
 
 ここで参考になるのが、NIST SP 800-137 の **情報セキュリティ継続的モニタリング（ISCM）** です。SP 800-137 は ISCM を次のように定義しています。
 
@@ -98,12 +110,40 @@ https://zenn.dev/anfangd/articles/cloudfront-alb-origin-exposure-audit
 
 ## 項目を「証拠の種類」で分ける
 
-スタンダードの項目は幅広いので、全部を同じやり方・同じ頻度で検査するのは現実的ではありません。そこで、各項目を **何を証拠に判断するか** で 3 つに分けます。
+システムのセキュリティ基準は、ふつう**管理策の領域ごと**に項目が並んでいます。土台にしたフレームワークがそういう並びだからです。ISO/IEC 27001 の附属書 A は組織・人・物理・技術の 4 つのテーマで、CSF 2.0 は 6 つの機能の下にアクセス制御（PR.AA）やデータセキュリティ（PR.DS）といったカテゴリーで整理しています。システムの基準なら、たとえば次のような並びになります。
+
+| 領域 | 基準の項目の例 |
+|---|---|
+| アクセス制御 | 権限は必要最小限にする。管理者の操作には多要素認証を必須にする |
+| ネットワーク・公開経路 | インターネットからの入口を決めた経路に限定する |
+| データ保護 | 保存時と通信時に暗号化する。バックアップから戻せるようにする |
+| ログ・監視 | 操作ログを一定期間残し、異常を検知して通知する |
+| 脆弱性管理 | 依存ライブラリや OS の脆弱性に、決めた期限内に対応する |
+| インシデント対応 | 連絡体制と手順を決め、訓練する |
+
+この並びは「何を守るか」を考えるには分かりやすいのですが、検査を自動化しようとすると使いにくくなります。同じ領域の中に、確かめ方の違う項目が混ざっているからです。たとえばアクセス制御なら、次の 3 つは見るものがまったく違います。
+
+- IAM ポリシーが最小権限になっているか：設定を見れば判断できる
+- 権限設計の方針が決まっているか：文書を見て判断する
+- 権限の棚卸しを実際に回しているか：運用の記録や人に聞かないと判断できない
+
+そこで、領域の並びはそのまま残し、検査のための**もう 1 つの軸**として、各項目を **何を証拠に判断するか** で 3 つに分けます。領域と掛け合わせると、次のようになります。
+
+| 領域 | 設定・IaC | 文書 | 運用の実態 |
+|---|---|---|---|
+| アクセス制御 | IAM ポリシー、MFA の設定 | 権限設計の方針 | 権限の棚卸しの記録 |
+| ネットワーク・公開経路 | SG、ALB のリスナー、CloudFront の設定 | 構成図、脅威分析 | 例外を認めたときの記録 |
+| データ保護 | KMS、S3 の暗号化設定、バックアップの設定 | データの分類 | 復旧訓練の記録 |
+| ログ・監視 | CloudTrail、アラームの設定 | 監視設計、Runbook | アラートに対応した記録 |
+| 脆弱性管理 | Inspector の有効化、依存の自動更新の設定 | 対応期限のルール | 期限内に直したかの記録 |
+| インシデント対応 | 通知先・エスカレーションの設定 | 対応手順、インシデントの振り返り | 訓練の実施記録、オンコール体制 |
+
+列ごとにまとめると、証拠の種類によって検査のしかたと頻度がそろいます。
 
 | 証拠の種類 | 例 | 主なフレームワークの観点 | 検査のしかた | 頻度の目安 |
 |---|---|---|---|---|
 | **設定・IaC** | AWS のリソース設定、Terraform のコード、IAM ポリシー | CSF の PR.PS（プラットフォームのセキュリティ）、PR.AA（アクセス制御）、Well-Architected | 決定的なルールで毎回。組み合わせはエージェント | 変更のたび＋週 1 |
-| **文書** | 設計書、脅威分析、ADR、Runbook、インシデントの振り返り | CSF の ID.RA（リスク評価）、PRR のチェックリスト、ASVS | エージェントがスタンダードや実際の構成とのずれを指摘し、人が確認 | 月 1＋設計変更のとき |
+| **文書** | 設計書、脅威分析、ADR、Runbook、インシデントの振り返り | CSF の ID.RA（リスク評価）、PRR のチェックリスト、ASVS | エージェントがシステムのセキュリティ基準や実際の構成とのずれを指摘し、人が確認 | 月 1＋設計変更のとき |
 | **運用の実態** | オンコール体制、権限の棚卸し、訓練の実施記録 | CSF の GV.RR（役割と責任）、RS.MA（インシデント管理） | 記録（チケット、ログ）から一部をエージェントが拾い、残りは人へのヒアリング | 四半期〜年 1 |
 
 この表を作るだけでも、効果があります。
@@ -176,11 +216,16 @@ https://zenn.dev/anfangd/articles/cloudfront-alb-origin-exposure-audit
 
 `in_checklist` が `false` の指摘は、チェックリストにない探索で見つかったものです。トリアージで本当に危ないと判断したら、`suggested_rule` をもとにルールを足します。`run` には、どのモデル・どのプロンプト・どの版のチェックリストで判断したかを残します。同じ入力でも結果が変わりうるので、あとから説明できるようにするためです。
 
+項目の考え方は、AWS Security Hub の ASFF（Severity、Confidence、Compliance.RelatedRequirements）と、NIST OSCAL の評価結果フォーマット（証拠と収集時刻を持つ observation）を参考にしています。`in_checklist`・`suggested_rule`・`run` は、見つけたものをルールに育てるために足した項目です。
+
+- [Optional top-level ASFF attributes - AWS Security Hub](https://docs.aws.amazon.com/securityhub/latest/userguide/asff-top-level-attributes.html)
+- [Assessment Results Model - NIST OSCAL](https://pages.nist.gov/OSCAL/learn/concepts/layer/assessment/assessment-results)
+
 ### 年 1 回のアセスメントの位置付けが変わる
 
 このループが回り始めると、年 1 回のアセスメントの役割が変わります。ゼロから全部を調べる場ではなく、**1 年分の報告と対応の記録を確かめる場**になります。指摘が出て、トリアージされ、直されたかどうかが記録に残っているので、アセスメントの負担も下がります。
 
-## 具体例：CloudFront の裏の ALB
+## CloudFront の裏の ALB で流れを追う
 
 前の記事で扱った CloudFront と ALB の話を、このループに当てはめてみます。
 
@@ -218,7 +263,7 @@ https://zenn.dev/anfangd/articles/cloudfront-alb-origin-exposure-audit
 
 ### 最終判断は人がする
 
-エージェントは「下準備をする役」です。スタンダードを満たしているかを判断し、リスクを受容するかを決めるのは人です。監査で説明責任を負えるのは人だけだからです。
+エージェントは「下準備をする役」です。システムのセキュリティ基準を満たしているかを判断し、リスクを受容するかを決めるのは人です。監査で説明責任を負えるのは人だけだからです。
 
 ### エージェントの権限を絞る
 
@@ -226,7 +271,7 @@ https://zenn.dev/anfangd/articles/cloudfront-alb-origin-exposure-audit
 
 - **読み取り専用にする**：変更や削除の権限は持たせません。指摘を直すのは、人が承認したあとの別の仕組みです
 - **データ本体まで読ませない**：S3 のオブジェクトやシークレットの値など、データの中身まで読める広い読み取り権限は避けます。AWS 管理ポリシーなら、セキュリティ設定の確認向けの `SecurityAudit` などを起点に、必要なものに絞ります
-- **エージェント自体も評価の対象にする**：エージェントもシステムの 1 つとして、スタンダードに沿って権限・ログ・データの扱いを評価します。構成情報をどのモデルの提供元に送るのかも、社内のルールと照らし合わせます
+- **エージェント自体も評価の対象にする**：エージェントもシステムの 1 つとして、システムのセキュリティ基準に沿って権限・ログ・データの扱いを評価します。構成情報をどのモデルの提供元に送るのかも、社内のルールと照らし合わせます
 
 ### 読んだ内容の中の指示に従わせない
 
@@ -261,6 +306,9 @@ https://zenn.dev/anfangd/articles/cloudfront-alb-origin-exposure-audit
 - [NIST SP 800-137 Information Security Continuous Monitoring (ISCM)](https://nvlpubs.nist.gov/nistpubs/legacy/sp/nistspecialpublication800-137.pdf)
 - [ISO/IEC 27001:2022 Information security management systems](https://www.iso.org/standard/27001)
 - [OWASP Application Security Verification Standard](https://asvs.owasp.org/)
+- [OWASP SAMM](https://owaspsamm.org/model/)
+- [Microsoft Security Development Lifecycle (SDL)](https://learn.microsoft.com/en-us/compliance/assurance/assurance-microsoft-security-development-lifecycle)
+- [PCI DSS Document Library](https://www.pcisecuritystandards.org/document_library/)
 - [The Evolving SRE Engagement Model - Google SRE Book](https://sre.google/sre-book/evolving-sre-engagement-model/)
 - [Security pillar - AWS Well-Architected Framework](https://docs.aws.amazon.com/wellarchitected/latest/security-pillar/welcome.html)
 - [AWS Audit Manager availability change](https://docs.aws.amazon.com/audit-manager/latest/userguide/audit-manager-availability-change.html)
