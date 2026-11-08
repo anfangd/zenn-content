@@ -24,7 +24,7 @@ published: true
 
 @[tweet](https://twitter.com/nasub7373/status/2117957893232451709)
 
-3 つ目の「Host ヘッダー付きの攻撃」は、CloudFront を通らずに ALB へ直接つなぎ、Host ヘッダーに本来のドメイン名を入れてリクエストを送る攻撃のことです。ALB は Host ヘッダーを見てどのサイトに振り分けるかを決めているので、こうすると CloudFront に置いた WAF を通らずに、本物のサイトへ届きます。CT Log は、その入り口になるホスト名を探すのに使われます（詳しくは[CT Log の記事](https://zenn.dev/anfangd/articles/ct-log-hostname-exposure-ca-ct)）。
+3 つ目の「Host ヘッダー付きの攻撃」は、層ごとに分けると次の組み合わせです。DNS で ALB の IP アドレスを引き、CloudFront を通らずにその IP アドレスへ直接 TCP / TLS でつなぎます。そのうえで、HTTP リクエストの Host ヘッダーに本来のドメイン名を入れます。ALB は HTTP の Host ヘッダーを見てどのサイトに振り分けるかを決めているので、こうすると CloudFront に置いた WAF を通らずに、本物のサイトへ届きます。CT Log は、その入り口になるホスト名を探すのに使われます（詳しくは[CT Log の記事](https://zenn.dev/anfangd/articles/ct-log-hostname-exposure-ca-ct)）。
 
 @[tweet](https://twitter.com/___nix___/status/2117996284783300621)
 
@@ -121,7 +121,7 @@ CloudFront の FAQ でも、マネージドな仕組みで要件を満たせな�
 
 ![VPCオリジン](/images/aws-web-ingress-patterns/01-vpc-origin.png)
 
-プライベートサブネットにある ALB / NLB / EC2 を、CloudFront のオリジンとして直接使えます。ALB にパブリック IP がないため、**CT Log でホスト名を知られても、ALB に直接つないで Host ヘッダーに本来のドメイン名を入れても、インターネットから届く経路自体がありません**。VPC オリジンの利用に追加料金はかかりません。
+プライベートサブネットにある ALB / NLB / EC2 を、CloudFront のオリジンとして直接使えます。ALB にパブリック IP がないため、**CT Log でホスト名を知られても、ALB の IP アドレスに直接つないで HTTP の Host ヘッダーに本来のドメイン名を入れても、インターネットから届く経路自体がありません**。VPC オリジンの利用に追加料金はかかりません。
 
 ### 設定プラクティス
 
