@@ -383,7 +383,7 @@ resource "aws_lb" "web_internal" {
 
 切り戻しは、昇格前ならステージングへの振り分けを止めるだけで済みます。昇格後は、旧 ALB が残っている間なら、プライマリのオリジンを旧 ALB に戻せばすぐに戻せます。旧 ALB を消すのは、切り戻す可能性がなくなってからにしましょう。
 
-VPC オリジンに移ると、2026 年 7 月のように VPC オリジンそのものが止まったときの備えが別に必要になります。オリジングループのセカンダリと、切り替えるまでの待ち時間（既定で最大 30 秒）は、移行と一緒に決めておきます。旧 ALB を消すか、閉じた状態で迂回路として残すかも、このときに決めます。決めておくことは[前の記事の ①](https://zenn.dev/anfangd/articles/aws-web-ingress-origin-protection) にまとめました。
+VPC オリジンに移ると、2026 年 7 月のように VPC オリジンそのものが止まったときの備えが別に必要になります。オリジングループのセカンダリと、切り替えるまでの待ち時間（接続できないときだけで、既定で最大 30 秒）は、移行と一緒に決めておきます。旧 ALB を消すか、閉じた状態で迂回路として残すかも、このときに決めます。決めておくことは[前の記事の ①](https://zenn.dev/anfangd/articles/aws-web-ingress-origin-protection) にまとめました。
 
 - [Restrict access with VPC origins - Amazon CloudFront](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/private-content-vpc-origins.html)
 - [Use CloudFront continuous deployment to safely test CDN configuration changes](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/continuous-deployment.html)

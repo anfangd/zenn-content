@@ -36,7 +36,7 @@ published: true
 - **プレフィックスリストだけでは不十分**です。他人の CloudFront も同じ IP 帯から来るため、本体は秘密ヘッダーの照合です
 - **CT Log** にはオリジン用に取った証明書のホスト名が載るので、「ホスト名は知られる前提」で設計します
 - 新規構築なら **VPC オリジン＋`CloudFront-VPCOrigins-Service-SG` 限定** が第一候補です。名前を知られても、そもそも到達できません
-- VPC オリジンも止まることはあります（2026年7月）。オリジンへの接続は既定で最大 30 秒待つので、**切り替えるまでの待ち時間と切り替え先**は先に決めておきます
+- VPC オリジンも止まることはあります（2026年7月）。接続できないときは、それだけで既定で最大 30 秒待つので、**切り替えるまでの待ち時間と切り替え先**は先に決めておきます
 - **WAF は「中身を検査する層」、VPC オリジン / OAC / SG は「届く経路を絞る層」** です。役割が違うので両方必要で、WAF の主戦場はエッジ（CloudFront）です
 
 ## 以前のプラクティスと、いまのプラクティス
@@ -226,11 +226,11 @@ curl -s -o /dev/null -w '%{http_code}\n' https://www.example.com/
 
 | 決めておくこと | 内容 |
 |---|---|
-| 切り替えるまでの待ち時間 | 接続タイムアウトは既定で 10 秒、試行は 3 回です。オリジングループのセカンダリに切り替わるまで、既定で**最大 30 秒**待ちます。タイムアウト（1〜10 秒）や試行回数（1〜3 回）を下げると短くできますが、普段の遅い応答でも切り替わりやすくなります |
-| 切り替え先 | オリジングループのセカンダリに、S3 のメンテナンスページや、VPC オリジンを使わない経路を置きます。切り替わるのは GET、HEAD、OPTIONS だけで、POST などは切り替わりません |
+| 切り替えるまでの待ち時間 | 接続タイムアウトは既定で 10 秒、試行は 3 回です。接続できない場合、オリジングループのセカンダリに切り替わるまで既定で**最大 30 秒**待ちます。タイムアウト（1〜10 秒）や試行回数（1〜3 回）を下げると短くできますが、接続の確立が遅いだけのときにも切り替わりやすくなります。接続できたあとに応答が返らない場合は、応答タイムアウト（既定 30 秒）が別にかかり、GET と HEAD は試行回数ぶんやり直すので、待ちはさらに長くなりえます |
+| 切り替え先 | オリジングループのセカンダリに、S3 のメンテナンスページや、VPC オリジンを使わない経路を置きます。切り替わるのは GET、HEAD、OPTIONS だけで、POST などは切り替わりません。OPTIONS は、キャッシュ対象のメソッドに入れている場合だけです |
 | キャッシュで持たせる | `Cache-Control` に `stale-if-error` を付けておくと、オリジンがエラーのときに有効期限切れのキャッシュを返せます |
 | 迂回路 | VPC オリジンを使わない経路（②など）を、障害が起きてから作るのか、閉じた状態で用意しておくのかを決めます |
-| 検知 | VPC オリジンが作る ENI にはメトリクスがありません。CloudFront の 5xx エラー率やオリジンのレイテンシーで異常を見ます |
+| 検知 | VPC オリジンが作る ENI について、ドキュメントにはメトリクスの記載がありません（鈴木さんの発表資料でも、提供されない点が指摘されています）。CloudFront の 5xx エラー率やオリジンのレイテンシーで異常を見ます |
 
 根拠：
 - [Origin settings（Connection attempts / Connection timeout） - Amazon CloudFront](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/DownloadDistValuesOrigin.html)
@@ -570,7 +570,7 @@ curl -sI http://www.example.com/ | grep -iE '^(HTTP|location)'
 
 ![Lambda Web Functions OAC](/images/aws-web-ingress-patterns/10-lambda-web-functions-oac.png)
 
-2026年10月に登場した、Node.js の Web サーバー（Express や Hono など）をそのまま Lambda で動かす仕組みです。HTTPS のエンドポイントが付いてきて、複数リージョンにまたがるエンドポイントにすると、レイテンシーで近いリージョンに振り分けます。守り方は④の関数 URL と同じで、CloudFront の OAC で CloudFront 専用にします。
+2026年10月に登場した、Node.js の Web サーバー（Express や Hono など）をそのまま Lambda で動かす仕組みです。HTTPS のエンドポイントが付いてきて、複数リージョンにまたがるエンドポイントにすると、レイテンシーで近いリージョンに振り分けます。CloudFront の OAC で CloudFront 専用にする考え方は④の関数 URL と同じですが、IAM のアクション名や OAC の署名動作が違うので、④の手順はそのまま使えません。
 
 エンドポイントは、認証の種類にかかわらず**常にインターネットから届きます**。`IamAuth` にすると「誰が呼べるか」を IAM で絞れますが、ネットワークとして閉じるわけではありません。`ApplicationManaged` のまま CloudFront を前に置いても、エンドポイントのドメインを直接叩けば CloudFront と WAF を迂回できます。
 
@@ -578,7 +578,7 @@ curl -sI http://www.example.com/ | grep -iE '^(HTTP|location)'
 
 - エンドポイントの認証の種類は **`IamAuth`** にします
 - リソースベースポリシーで、`cloudfront.amazonaws.com` に `lambda:InvokeWebFunctionEndpoint` を許可し、`aws:SourceArn` で自社のディストリビューションに限定します
-- OAC はオリジンの種類を `lambda`、署名動作を `always-amz-auth` にします。ビューワーの `Authorization` ヘッダーはそのままアプリに届くので、アプリ側の認証（JWT など）も使えます。署名は、リージョンのエンドポイントなら SigV4、グローバルのエンドポイントなら SigV4a です
+- OAC はオリジンの種類を `lambda`、署名動作を `always-amz-auth` にします。この署名動作では、ビューワーの `Authorization` ヘッダーを上書きしないので、アプリ側の認証（JWT など）も使えます。ただし GET と HEAD では、キャッシュポリシーに `Authorization` を含めないと CloudFront がこのヘッダーを外して転送します。署名は、リージョンのエンドポイントなら SigV4、グローバルのエンドポイントなら SigV4a です
 - オリジンリクエストポリシーは `AllViewerExceptHostHeader` にします（Host ヘッダーがディストリビューションのドメインのままだと 404 になります）
 - 組織で公開エンドポイントを禁止したいなら、SCP で条件キー `lambda:Request/WebFunctionAuthType` を使えます
 
@@ -587,7 +587,7 @@ curl -sI http://www.example.com/ | grep -iE '^(HTTP|location)'
 - エンドポイントには、カスタムドメインも WAF も直接は付けられません。どちらも CloudFront を前に置いて使います
 - OAC を使うキャッシュビヘイビアでは、Lambda@Edge の origin request / origin response トリガーが使えません
 - グローバルのエンドポイントにオプトインリージョンが含まれると、OAC の署名ができず 403 になります
-- 外向きの通信は、既定では VPC を通らず、送信元 IP も固定されません。VPC 内のリソースに届けるには egress network connector が必要で、使えるのは単一リージョン（HomeRegion）のエンドポイントだけです。**複数リージョンへの分散と、VPC 内のリソースへの接続は両立しません**
+- 外向きの通信は、既定では VPC を通らず、送信元 IP も固定されません。VPC 内のリソースに届けるには egress network connector が必要で、使えるのは `HomeRegion` タイプのエンドポイントだけです（`PerRegion` と `MultiRegion` では使えません）。**複数リージョンへの分散と、VPC 内のリソースへの接続は両立しません**
 - ランタイムは今のところ Node.js だけです
 
 :::details 確認コマンド

@@ -71,7 +71,7 @@ Regional NAT GW の[ドキュメント](https://docs.aws.amazon.com/vpc/latest/u
 
 ① は、アプリを VPC の中に置く前提です。2026 年 10 月に出た Lambda Web Functions を CloudFront の裏に置くと、Web アプリを動かすための VPC も、外に出るための NAT GW も持たずに済みます。外向きの通信は、既定では VPC を通らずに直接インターネットへ出るからです（[ドキュメント](https://docs.aws.amazon.com/lambda/latest/dg/web-functions-networking.html)）。
 
-ただし、VPC の中のデータベースなどに届けたいなら、egress network connector で VPC につなぐ必要があります。そうすると、エンドポイントは単一リージョン（HomeRegion）のものに限られます。複数リージョンに分散するなら、データも VPC の外に置くことになります。
+ただし、VPC の中のデータベースなどに届けたいなら、egress network connector で VPC につなぐ必要があります。egress network connector を使えるのは `HomeRegion` タイプのエンドポイントだけで、複数リージョンに振り分けるエンドポイントでは使えません（[ドキュメント](https://docs.aws.amazon.com/lambda/latest/dg/web-functions-networking.html)）。複数リージョンに分散しつつ VPC の中のデータを使いたいなら、つなぎ方を別に考える必要があります。
 
 アクセスの多くが海外から来るサイトで、VPC オリジンの構成からこの形に移った事例が、JAWS festa 2026 で発表されています（関連する記事を参照）。CloudFront からの守り方は、[9 パターン記事](https://zenn.dev/anfangd/articles/aws-web-ingress-origin-protection)の ⑨ にまとめました。
 
