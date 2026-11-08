@@ -24,8 +24,6 @@ published: true
 
 @[tweet](https://twitter.com/nasub7373/status/2117957893232451709)
 
-3 つ目の「Host ヘッダー付きの攻撃」は、層ごとに分けると次の組み合わせです。DNS で ALB の IP アドレスを引き、CloudFront を通らずにその IP アドレスへ直接 TCP / TLS でつなぎます。そのうえで、HTTP リクエストの Host ヘッダーに本来のドメイン名を入れます。ALB は HTTP の Host ヘッダーを見てどのサイトに振り分けるかを決めているので、こうすると CloudFront に置いた WAF を通らずに、本物のサイトへ届きます。CT Log は、その入り口になるホスト名を探すのに使われます（詳しくは[CT Log の記事](https://zenn.dev/anfangd/articles/ct-log-hostname-exposure-ca-ct)）。
-
 @[tweet](https://twitter.com/___nix___/status/2117996284783300621)
 
 どちらも重要な指摘です。一方で、2024年11月に **CloudFront VPC オリジン** が登場してから、選べる構成はかなり変わっています。
@@ -97,7 +95,9 @@ CT は、公的な CA（Certificate Authority：認証局）が発行した TLS 
 
 **DNS を公開していなくても、公的な証明書を取った時点でホスト名は知られる** と考えておきましょう。ワイルドカード証明書で個別のホスト名を隠すことはできますが、それは推測しにくくするだけの隠蔽策です。本筋は「名前を知られても届かない」構成にすることです。
 
-CA と CT の仕組み（構成・発行・検証・監視）は、図解付きで別の記事にまとめました。
+冒頭の投稿にあった「Host ヘッダー付きの攻撃」は、こうして知られたホスト名を使い、CloudFront を通らずに ALB へ直接リクエストを送る攻撃のことです。まず DNS で ALB の IP アドレスを引き、その IP アドレスに TCP / TLS で直接つなぎます。そのうえで、HTTP リクエストの Host ヘッダーに本来のドメイン名を入れます。ALB は Host ヘッダーを見てどのサイトに振り分けるかを決めているので、リクエストは CloudFront に置いた WAF を通らずに、本物のサイトへ届きます。
+
+CA と CT の仕組み（構成・発行・検証・監視）と、この攻撃を層ごとに分けた図は、別の記事にまとめました。
 
 https://zenn.dev/anfangd/articles/ct-log-hostname-exposure-ca-ct
 
@@ -222,7 +222,18 @@ curl -s -o /dev/null -w '%{http_code}\n' https://www.example.com/
 
 ### VPC オリジンが止まったときの備え
 
-2026年7月16日の 16:45〜20:18（日本時間）に、VPC オリジンを使うディストリビューションで 5xx エラーが増える障害がありました。S3 や公開 ALB など、ほかの種類のオリジンには影響がありませんでした。AWS は当日、VPC オリジンが必須でなければオリジンの種類を変えるよう案内しています。経緯や当日の迂回の手順は、DevelopersIO に詳しい記事があります（末尾の関連する記事を参照）。
+2026年7月16日の 16:45〜20:18（日本時間）に、VPC オリジンを使うディストリビューションで 5xx エラーが増える障害がありました。S3 や公開 ALB など、ほかの種類のオリジンには影響がありませんでした。AWS は当日の回避策として、VPC オリジン以外の種類のオリジンへの切り替えを案内しています。障害が起きてから取れる手は、サービスを続けるか、止めて利用者に知らせるかで分かれます。
+
+| やりたいこと | 方法 | 注意点 |
+|---|---|---|
+| サービスを続ける | キャッシュ動作のオリジンを、VPC オリジンを使わない経路（公開 ALB など）に切り替える | 切り替え先は前もって作っておく必要があります。ALB をインターネットに公開するので、② のプレフィックスリストと秘密ヘッダーも合わせて設定します |
+| 止めて知らせる | CloudFront Functions（ビューワーリクエスト）で、メンテナンスの応答を 503 で直接返す | オリジンにもキャッシュにも問い合わせずに返すので、タイムアウトを待ちません。返せるのは、関数のコードに書ける小さな HTML です |
+| 止めて知らせる | CloudFront に付けた WAF のルールを Block にし、カスタムレスポンスでメンテナンスの HTML を 503 で返す | オリジンに届く前に返すので、タイムアウトを待ちません。WAF をすでに付けていれば、ルールの切り替えだけで済みます |
+| 止めて知らせる | キャッシュ動作を S3（OAC）に向け、メンテナンスページを返す | S3 から返すとステータスコードは 200 です。503 にするには、CloudFront Functions（ビューワーレスポンス）で書き換えます |
+
+カスタムエラーレスポンスで、オリジンが 5xx を返したときに S3 のエラーページを 503 で返す方法もあります。ただしオリジンの失敗を待ってから返すので、接続できない場合は既定で最大 30 秒かかります。障害が起きてから切り替える手ではなく、前もって設定しておく備えです。
+
+経緯や当日の迂回の手順は、DevelopersIO に詳しい記事があります（末尾の関連する記事を参照）。
 
 障害そのものは防げないので、ここでは前もって決めておけることを並べます。
 
@@ -238,6 +249,10 @@ curl -s -o /dev/null -w '%{http_code}\n' https://www.example.com/
 - [Origin settings（Connection attempts / Connection timeout） - Amazon CloudFront](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/DownloadDistValuesOrigin.html)
 - [Optimize high availability with CloudFront origin failover](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/high_availability_origin_failover.html)
 - [Manage how long content stays in the cache (expiration) - Amazon CloudFront](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/Expiration.html)
+- [Determine function purpose（Generate an HTTP response in a viewer request event type） - Amazon CloudFront](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/function-code-choose-purpose.html)
+- [Amazon CloudFront announces support for HTTP status and response generation using CloudFront Functions (2023)](https://aws.amazon.com/about-aws/whats-new/2023/03/http-status-response-generation-cloudfront-functions)
+- [AWS WAF：Block アクションのカスタムレスポンス](https://docs.aws.amazon.com/waf/latest/developerguide/customizing-the-response-for-blocked-requests.html)
+- [Custom error pages and error caching - Amazon CloudFront](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/DownloadDistValuesErrorPages.html)
 
 ---
 
