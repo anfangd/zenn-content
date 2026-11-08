@@ -55,6 +55,8 @@ https://zenn.dev/anfangd/articles/aws-web-ingress-origin-protection
 | C. 秘密ヘッダー | CloudFront のプレフィックスリスト | ヘッダー一致なら forward、デフォルトは 403 | 届くが 403 | 届かない |
 | D. VPC オリジン | `CloudFront-VPCOrigins-Service-SG` | 内部 ALB | 届かない | 届かない |
 
+![CloudFront の裏の ALB がとりうる 4 つの状態](/images/cloudfront-alb-origin-exposure-audit/audit-01-states.png)
+
 A は論外に見えますが、「CloudFront 経由でしか使わないから大丈夫」と思われたまま残っていることがあります。いちばん見落とされやすいのは B です。CloudFront のプレフィックスリストには**他人のディストリビューションも含む CloudFront 全体の IP** が入っているので、第三者が自分の CloudFront のオリジンにあなたの ALB を指定すれば、SG を通過してしまいます。
 
 C は AWS のドキュメントにある公開 ALB 向けの構成で、今でも正しい対策です。ただし「ルールで防いでいる」構成なので、後で述べるように運用で穴が開く余地が残ります。
@@ -73,6 +75,8 @@ Security Hub CSPM（AWS Foundational Security Best Practices）で、この構�
 EC2.18 は既定値の `authorizedTcpPorts` が `[80, 443]` なので、`0.0.0.0/0` からの 443 を許可していても失敗になりません。Web サーバーとしては自然な判定ですが、「CloudFront の裏にいるはずの ALB」という文脈は持っていません。
 
 つまり、**状態 A のまま全部緑**ということが起こりえます。CSPM が悪いのではなく、リソース単体の設定チェックという仕組みの性質です。「この ALB は CloudFront のオリジンである」という関係と、「その ALB の SG・リスナー・スキーム」を突き合わせないと判定できません。
+
+![CSPM はリソースを 1 つずつ見る。穴は組み合わせにある](/images/cloudfront-alb-origin-exposure-audit/audit-02-cspm.png)
 
 - [Security Hub CSPM controls for Amazon CloudFront](https://docs.aws.amazon.com/securityhub/latest/userguide/cloudfront-controls.html)
 - [Security Hub CSPM controls for Elastic Load Balancing](https://docs.aws.amazon.com/securityhub/latest/userguide/elb-controls.html)
@@ -129,6 +133,8 @@ VPC オリジンのように**経路そのものがない**構成なら、こう
 | 攻撃者視点のテスト | 確定できる | **確定できる** | **確定できる** | 確定できる |
 
 ネットワークのツールは、パケットが届くかどうかを判定するものです。状態 B と C の違いは「届いたあとに ALB が 403 を返すかどうか」という L7 の話なので、ネットワークのツールでは区別できません。ここが「組み合わせの穴」が見つけにくい理由です。
+
+![検知の 3 段は、それぞれ見ている範囲が違う](/images/cloudfront-alb-origin-exposure-audit/audit-03-detection.png)
 
 そこで、次の 3 段で検知します。
 
@@ -336,6 +342,8 @@ B で 200 が返ってきたら、その ALB には CloudFront の WAF を通ら
 ## 安全に移行する
 
 見つけたあとの直し方です。いきなり VPC オリジンに切り替えるのではなく、穴をふさぐ応急処置と、構成を変える本移行を分けて進めます。
+
+![応急処置と本移行を分けて進める](/images/cloudfront-alb-origin-exposure-audit/audit-04-migration.png)
 
 ### ステップ 1：秘密ヘッダーで応急処置する（A・B → C）
 
