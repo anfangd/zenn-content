@@ -689,7 +689,7 @@ WAF の web ACL は CloudFront（Global）と ALB・API Gateway の REST API な
 | ④ Lambda 関数 URL（OAC） | CloudFront（Global） | 関数 URL には付けられない |
 | ⑤ Regional API Gateway | CloudFront（Global）＋必要に応じて REST API ステージ（Regional） | HTTP API には付けられない |
 | ⑥ Private API | CloudFront（Global） | 経路は①と同じ |
-| ⑦ Global Accelerator | ALB（Regional） | GA には付けられない。クライアント IP が保持されるので、IP ベースのルールがそのまま効く |
+| ⑦ Global Accelerator | ALB（Regional） | GA には付けられない。クライアント IP が保持されるので、IP ベースのルールをそのまま使える |
 | ⑧ 公開 ALB 直受け | ALB（Regional）※必須 | 唯一の L7 防御。Shield Advanced も検討 |
 | ⑨ Lambda Web Functions（OAC） | CloudFront（Global） | エンドポイントには付けられない |
 
