@@ -36,6 +36,7 @@ DMZ には、外から来る通信を受けるサーバー（Web、DNS、メー�
 | 昔の DMZ の役割 | 今の主な担当 | VPC の中にサーバーが要るか |
 | --- | --- | --- |
 | Web とリバースプロキシ | CloudFront + WAF（＋VPC オリジン） | 要らない（エッジ） |
+| TLS の終端と証明書 | CloudFront や ALB ＋ ACM | 要らない（鍵をサーバーに置かない） |
 | 外部向け DNS | Route 53 の公開ホストゾーン | 要らない |
 | メール送信の中継 | Amazon SES | 要らない |
 | 踏み台サーバー | Session Manager、EC2 Instance Connect Endpoint | 要らない（IAM で制御） |
@@ -43,6 +44,12 @@ DMZ には、外から来る通信を受けるサーバー（Web、DNS、メー�
 | HTTP 以外の公開（SFTP、UDP など） | internet-facing NLB、Global Accelerator、Transfer Family | 場合による |
 
 Web、DNS、メール、踏み台は、VPC の外のマネージドサービスか、IAM で制御する仕組みに移りました。最後まで VPC の中に何かが残るのは、外向きの通信と HTTP 以外の公開です。この 2 つが、次の 3 パターンの分かれ目になります。
+
+あわせて、TLS の扱いも変わりました。昔は DMZ の Web サーバー（Apache など）が TLS を終え、証明書と秘密鍵をディスクに置いていました。更新も人が手作業で行っていました。今は CloudFront や ALB が TLS を終え、証明書は ACM が持ちます。鍵はサーバーに置かれず、更新も自動です。後ろのサーバー群には、公開証明書が要りません。
+
+一方で、証明書に入る名前は昔も今も「利用者がアクセスする名前」で、変わっていません。変わったのは、CT ログで公開されるようになったことです。CloudFront の後ろに ALB を置くと、ALB を指す名前がもう 1 つ増え、それも公開されます。
+
+https://zenn.dev/anfangd/articles/ct-log-hostname-exposure-ca-ct
 
 もう 1 つ残るものがあります。IGW です。これは後の節で扱います。
 

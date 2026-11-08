@@ -252,7 +252,7 @@ aws securityhub enable-security-hub-feature-v2 --feature-name NETWORK_SCANNING
 
 最後は、B と C を確実に見分けるテストです。やることは攻撃者と同じで、**別のアカウントに検証用の CloudFront を作り、自分の ALB をオリジンに指定して**届くかを試します。
 
-オリジンのホスト名は、CT Log で調べられるものを使います（[CT Log の記事](https://zenn.dev/anfangd/articles/ct-log-hostname-exposure-ca-ct)の「手を動かして確かめる」の 1 を参照）。攻撃者もまさにこの手順でホスト名を見つけます。
+オリジンのホスト名は、CT Log で調べられるものを使います（[CT Log の記事](https://zenn.dev/anfangd/articles/ct-log-hostname-exposure-ca-ct)の「手を動かして確かめる」の 1 を参照）。攻撃者もまさにこの手順でホスト名を見つけます。そもそもなぜオリジン用の名前が増え、CT ログに載るのかは、同じ記事の「CloudFront の後ろの ALB には、名前がもう 1 つ増える」で説明しています。
 
 :::message alert
 このテストは、必ず**自分が管理しているリソース**に対してだけ行ってください。AWS の侵入テストのポリシーも確認しておきましょう。

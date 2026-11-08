@@ -118,6 +118,25 @@ Chrome の場合、有効期間が 180 日以下の証明書では 2 個、そ�
 
 「公的な証明書を取った時点でホスト名は知られる」と言われるのは、この監視フローがあるからです。
 
+## CloudFront の後ろの ALB には、名前がもう 1 つ増える
+
+証明書には、昔から利用者がアクセスする名前（`example.com` や `app.example.com` など）が入っていました。サーバーに置いた Apache で TLS を終えていた頃も、ロードバランサーで終えていた頃も同じです。変わったのは、CT によって、発行した公開証明書がすべて公開されるようになったことです。
+
+では、CT ログで「知られていないと思っていた名前」が見つかりやすいのはどんなときか。代表例が、CloudFront の後ろに ALB を置く構成です。
+
+![ALB が直接受ける場合と、CloudFront の後ろに置く場合の名前の数](/images/certificate-transparency-ct-log/ca-ct-05-origin-name.png)
+
+- internet-facing の ALB がパブリックサブネットで直接受けるときは、利用者に見せる名前がそのまま ALB を指します。名前は 1 つです
+- CloudFront の後ろでは、利用者に見せる名前は CloudFront を指します。そのため、ALB を指す名前（`app-origin.example.com` など）がもう 1 つ要ります
+  - CloudFront は、オリジンへ HTTPS でつなぐとき、オリジンの名前と証明書の名前が一致するかを確かめます
+  - ALB の既定の名前（`*.elb.amazonaws.com`）には、自分で証明書を発行できません
+
+この 2 つ目の名前も普通の公開名で、証明書を発行すれば CT ログに載ります。ただ、運用する側は「CloudFront からしか使わないから、誰にも伝わっていない」と思いがちです。実際は、誰でも CT ログで知ることができます。
+
+CT ログで分かるのはほぼドメイン名だけですが、名前から DNS を引けば ALB にたどり着けます。ALB がインターネットから届く状態のままだと、CloudFront に置いた WAF などを通らずに ALB に届いてしまいます。なので、名前を隠すのではなく、ALB 側を閉じます。VPC オリジンで internal にするか、CloudFront が付けるカスタムヘッダーを持たないリクエストを断ります。
+
+- [Requiring HTTPS for communication between CloudFront and your custom origin](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/using-https-cloudfront-to-custom-origin.html)
+
 ## 実務で効くこと
 
 - **予防**：DNS に CAA レコードを置き、自ドメインの証明書を発行できる CA を限定します（ACM を使うなら Amazon 系の CA を許可します）
