@@ -578,7 +578,7 @@ Web Functions 自体は Lambda が管理する基盤で動き、自分の VPC �
 
 | 方向 | どうなっているか |
 |---|---|
-| 受ける側 | エンドポイントは常にインターネットから届きます。PrivateLink のエンドポイントもありません。閉じる手段は `IamAuth` と CloudFront の OAC です |
+| 受ける側 | エンドポイントは常にインターネットから届きます。PrivateLink のエンドポイントもありません。呼べる相手を絞る手段は `IamAuth` と CloudFront の OAC です |
 | 出ていく側（connector なし、既定） | VPC を通らずにインターネットへ出ます。送信元 IP は固定されず、VPC の中のリソースには届きません |
 | 出ていく側（connector あり） | egress network connector のサブネットにある ENI から出るので、ルートテーブルやセキュリティグループが効きます。インターネットに出るには、そのサブネットから NAT GW（IPv6 なら egress-only IGW）へのルートが必要です。使えるのは `HomeRegion` タイプのエンドポイントだけです |
 
@@ -620,24 +620,24 @@ curl -s -o /dev/null -w '%{http_code}\n' https://www.example.com/
 
 ## 9 パターン以外の入口
 
-ここまでの 9 パターンは、CloudFront、ALB、API Gateway の REST API を中心にした受け方です。AWS には、ほかにも自分でエンドポイントを持つサービスや、リソースを直接公開する方法があります。どれも何もしなければインターネットから届くので、棚卸しのときに見落とさないよう一覧にしておきます。
+ここまでの 9 パターンは、CloudFront、ALB、API Gateway の REST API を中心にした受け方です。AWS には、ほかにも自分でエンドポイントを持つサービスや、リソースを直接公開する方法があります。多くは既定のままだとインターネットから届くので、棚卸しのときに見落とさないよう一覧にしておきます。
 
 ### 自分でエンドポイントを持つサービス
 
 | サービス | 既定の状態 | 閉じ方と WAF |
 |---|---|---|
-| API Gateway の HTTP API | `execute-api` のドメインで誰でも呼べる | 既定のエンドポイントを無効にして、カスタムドメインだけで受けられる。WAF は直接付けられない。HTTP API には API キーがないので、⑤の API キーで直接アクセスを防ぐ方法は使えない |
+| API Gateway の HTTP API | `execute-api` のドメインで誰でも呼べる | 既定のエンドポイントを無効にして、カスタムドメインだけで受けられる（カスタムドメインは公開のまま）。Private のエンドポイントやリソースポリシーはなく、WAF も直接付けられない。API キーもないので、⑤の API キーで直接アクセスを防ぐ方法は使えない |
 | AppSync（GraphQL） | 公開（`GLOBAL`）。作成後に変えられない | 作るときに `PRIVATE` にすると、VPC エンドポイント経由でしか届かない。Regional の WAF を直接付けられる |
 | Amplify Hosting | `amplifyapp.com` の既定ドメインで公開 | WAF（Global）を直接付けられる（2025年3月 GA）。既定ドメインへのアクセスを制限する設定もある |
-| App Runner | インターネットから届く | VPC からだけ届くプライベートエンドポイントにできる。WAF も付けられる。2026年4月30日から新規の利用者は受け付けていないので、既存環境の棚卸し対象として見る |
-| Bedrock AgentCore の Gateway と Runtime | AWS のドメインのエンドポイントで受ける | Gateway は WAF を直接付けられ、受ける側の認証は IAM か JWT から選ぶ（なしも選べる）。Runtime の前に ALB と WAF を置く場合は、リソースポリシーで VPC エンドポイント経由以外を拒否しないと迂回される |
+| App Runner | インターネットから届く | VPC からだけ届くプライベートエンドポイントにできる。WAF も付けられる。2026年4月30日から新規の利用者は受け付けていない（[What's New](https://aws.amazon.com/about-aws/whats-new/2026/03/aws-service-availability/)）ので、既存環境の棚卸し対象として見る |
+| Bedrock AgentCore の Gateway と Runtime | AWS のドメインのエンドポイントで受ける | Gateway は Regional の WAF を直接付けられ、受ける側の認証は IAM、JWT などから選ぶ（認証なしも選べるが、本番では非推奨）。Runtime には WAF を直接付けられない。前に ALB と WAF を置く場合は、リソースポリシーで VPC エンドポイント経由以外を拒否しておかないと、認証情報を持つ呼び出し元が WAF を通らずに直接呼べる |
 
 ### リソースを直接公開する
 
 | 入口 | 何が問題か | 見直し先 |
 |---|---|---|
 | public IP を持つ EC2 | CloudFront のカスタムオリジンにしていても、IP やホスト名を知られると直接届く | ①（EC2 を VPC オリジンにする） |
-| internet-facing の NLB で直接受ける | エッジでの吸収も WAF もない | HTTP なら①、固定 IP や TCP / UDP が必要なら⑦ |
+| internet-facing の NLB で直接受ける | エッジでの吸収も WAF もない | HTTP なら①（ただし TLS リスナーの NLB は VPC オリジンにできない）。固定 IP や TCP / UDP が必要なら⑦の形で、エンドポイントを NLB や EC2 にする |
 | S3 の静的ウェブサイトホスティングのエンドポイント | 公開読み取りと HTTP だけ。CloudFront を前に置いても OAC は使えない | ③（通常のバケットと OAC）か Amplify Hosting |
 | Lightsail のインスタンスやロードバランサー | EC2 とは別のコンソールと API で管理されるので、EC2 の棚卸しから漏れやすい | 棚卸しの対象に入れる |
 
@@ -645,22 +645,25 @@ curl -s -o /dev/null -w '%{http_code}\n' https://www.example.com/
 
 構成としては①か⑧ですが、ALB を自分では作らないので、気づかないうちに公開の入口ができていることがあります。Terraform の plan にも `aws_lb` として出てきません。
 
-- **ECS Express Mode**：public サブネットを渡すと、internet-facing の ALB を作ります
+- **ECS Express Mode**：public サブネットを渡すと、internet-facing の ALB を作ります。サブネットを指定しないと、デフォルト VPC の public サブネットを使うので、やはり internet-facing になります
 - **ECS Gateway**：ALB を作り、最大 25 のサービスで共有します
 - **EKS の AWS Load Balancer Controller**：既定は internal で、`alb.ingress.kubernetes.io/scheme: internet-facing` を付けると公開されます
-- **Elastic Beanstalk**：環境の設定に応じてロードバランサーを作ります
+- **Elastic Beanstalk**：ロードバランサー付きの環境では、ロードバランサーを作ります。スキームは既定で public です
 
 根拠：
 - [Disable the default endpoint for HTTP APIs - Amazon API Gateway](https://docs.aws.amazon.com/apigateway/latest/developerguide/http-api-disable-default-endpoint.html)
+- [Choose between REST APIs and HTTP APIs - Amazon API Gateway](https://docs.aws.amazon.com/apigateway/latest/developerguide/http-api-vs-rest.html)
+- [AssociateWebACL（WAF を関連付けられるリソースの一覧） - AWS WAF API Reference](https://docs.aws.amazon.com/waf/latest/APIReference/API_AssociateWebACL.html)
 - [Using AWS AppSync Private APIs](https://docs.aws.amazon.com/appsync/latest/devguide/using-private-apis.html)
 - [AWS Amplify Hosting announces Web Application Firewall Protection in general availability (2025)](https://aws.amazon.com/about-aws/whats-new/2025/03/aws-amplify-hosting-web-application-firewall-protection/)
 - [Enabling Private endpoint for incoming traffic - AWS App Runner](https://docs.aws.amazon.com/apprunner/latest/dg/network-pl.html)
 - [Protecting your gateway with AWS WAF - Amazon Bedrock AgentCore](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/gateway-waf.html)
+- [Set up inbound authorization for your gateway - Amazon Bedrock AgentCore](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/gateway-inbound-auth.html)
 - [Securing Amazon Bedrock AgentCore Runtime with AWS WAF (AWS Blog)](https://aws.amazon.com/blogs/machine-learning/securing-amazon-bedrock-agentcore-runtime-with-aws-waf/)
 - [Restrict access to an Amazon S3 origin（ウェブサイトエンドポイントでは OAC を使えない）](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/private-content-restricting-access-to-s3.html)
 - [Resources created by Amazon ECS Express Mode services](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/express-service-work.html)
 - [Amazon ECS Gateway](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/gateway-overview.html)
-- [AWS Load Balancer Controller: Ingress annotations](https://kubernetes-sigs.github.io/aws-load-balancer-controller/latest/guide/ingress/annotations/)
+- [AWS Load Balancer Controller: Ingress annotations（GitHub）](https://github.com/kubernetes-sigs/aws-load-balancer-controller/blob/master/docs/guide/ingress/annotation.md)
 
 ---
 
