@@ -1,5 +1,5 @@
 ---
-title: "AWSでWebリクエストを受ける8パターンと「オリジンを裸にしない」設定プラクティス"
+title: "AWSでWebリクエストを受ける9パターンと「オリジンを裸にしない」設定プラクティス"
 emoji: "🛡️"
 type: "tech" # tech: 技術記事 / idea: アイデア
 topics: ["AWS","CloudFront","ALB","WAF","Security"]
@@ -8,6 +8,8 @@ published: true
 
 :::message
 この記事は、Claude と一緒に AWS 公式ドキュメントを調べ、構成図を作りながら整理した内容をまとめたものです。各設定の根拠は、記事中のリンク先の公式ドキュメントで確認できます。
+
+2026年11月に、⑨ Lambda Web Functions、VPC オリジンが止まったときの備え、9 パターン以外の入口の一覧を追記しました。
 :::
 
 ## はじめに
@@ -26,7 +28,7 @@ published: true
 
 どちらも重要な指摘です。一方で、2024年11月に **CloudFront VPC オリジン** が登場してから、選べる構成はかなり変わっています。
 
-この記事では、AWS で Web リクエストを受ける代表的な 8 パターンを、**公式ドキュメントの根拠付き**で、構成図と設定プラクティスにまとめます。
+この記事では、AWS で Web リクエストを受ける代表的な 9 パターンを、**公式ドキュメントの根拠付き**で、構成図と設定プラクティスにまとめます。
 
 ## TL;DR
 
@@ -34,6 +36,7 @@ published: true
 - **プレフィックスリストだけでは不十分**です。他人の CloudFront も同じ IP 帯から来るため、本体は秘密ヘッダーの照合です
 - **CT Log** にはオリジン用に取った証明書のホスト名が載るので、「ホスト名は知られる前提」で設計します
 - 新規構築なら **VPC オリジン＋`CloudFront-VPCOrigins-Service-SG` 限定** が第一候補です。名前を知られても、そもそも到達できません
+- VPC オリジンも止まることはあります（2026年7月）。接続できないときは、それだけで既定で最大 30 秒待つので、**切り替えるまでの待ち時間と切り替え先**は先に決めておきます
 - **WAF は「中身を検査する層」、VPC オリジン / OAC / SG は「届く経路を絞る層」** です。役割が違うので両方必要で、WAF の主戦場はエッジ（CloudFront）です
 
 ## 以前のプラクティスと、いまのプラクティス
@@ -52,7 +55,10 @@ ALB をインターネットに公開する構成は今もよく見かけます�
 | 2022年8月 | OAC（S3 向け） | OAI の制約（SSE-KMS など）が解消 |
 | 2024年4月 | OAC が Lambda 関数 URL に対応 | 関数 URL も CloudFront 専用にできるように |
 | 2024年11月 | **VPC オリジン** | ALB / NLB / EC2 をプライベートサブネットに置いたまま CloudFront から使えるように |
+| 2025年9月 | CloudFront が IPv6 のオリジンに対応（S3 と VPC オリジンを除く） | CloudFront からオリジンまで IPv6 で届けられるように |
 | 2025年11月 | VPC オリジンのクロスアカウント対応 | CloudFront とオリジンを別アカウントに分けた構成でも使えるように |
+| 2026年10月 | VPC オリジンのデュアルスタック対応 | VPC オリジンでも、オリジンまで IPv6 で届けられるように |
+| 2026年10月 | **Lambda Web Functions**（CloudFront の OAC にも対応） | Node.js の Web サーバーをそのまま Lambda で動かし、CloudFront 専用にできるように（⑨） |
 
 AWS 自身も、VPC オリジンの発表で「これまで VPC 内のオリジンはパブリックサブネットに置く必要があった」と書いています。つまり、10 年近く定番だった「ALB を公開して IP 制限と秘密ヘッダーで守る」方式は、今では**VPC オリジンが使えない場合のフォールバック**という位置付けになりました。
 
@@ -67,6 +73,9 @@ AWS 自身も、VPC オリジンの発表で「これまで VPC 内のオリジ�
 - [Amazon CloudFront now supports OAC for Lambda function URL origins (2024)](https://aws.amazon.com/about-aws/whats-new/2024/04/amazon-cloudfront-oac-lambda-function-url-origins/)
 - [Amazon CloudFront announces VPC origins (2024)](https://aws.amazon.com/about-aws/whats-new/2024/11/amazon-cloudfront-vpc-origins/)
 - [Introducing cross-account support for Amazon CloudFront VPC origins](https://aws.amazon.com/blogs/networking-and-content-delivery/introducing-cross-account-support-for-amazon-cloudfront-virtual-private-cloud-vpc-origins/)
+- [Amazon CloudFront announces support for IPv6 origins (2025)](https://aws.amazon.com/about-aws/whats-new/2025/09/amazon-cloudfront-ipv6-origins/)
+- [Amazon CloudFront announces dual-stack support for VPC origins (2026)](https://aws.amazon.com/about-aws/whats-new/2026/10/cloudfront-vpc-origin-dualstack/)
+- [Amazon CloudFront now supports AWS Lambda Web Functions as an origin (2026)](https://aws.amazon.com/about-aws/whats-new/2026/10/cloudfront-lambda-web-functions-origin/)
 
 ## 前提知識
 
@@ -208,6 +217,25 @@ curl -s -o /dev/null -w '%{http_code}\n' https://www.example.com/
 - [Restrict access with VPC origins - Amazon CloudFront](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/private-content-vpc-origins.html)
 - [VPC BPA basics - Amazon VPC](https://docs.aws.amazon.com/vpc/latest/userguide/security-vpc-bpa-basics.html)
 - [Introducing CloudFront VPC Origins (AWS Blog)](https://aws.amazon.com/blogs/networking-and-content-delivery/introducing-cloudfront-virtual-private-cloud-vpc-origins-shield-your-web-applications-from-public-internet/)
+
+### VPC オリジンが止まったときの備え
+
+2026年7月16日の 16:45〜20:18（日本時間）に、VPC オリジンを使うディストリビューションで 5xx エラーが増える障害がありました。S3 や公開 ALB など、ほかの種類のオリジンには影響がありませんでした。AWS は当日、VPC オリジンが必須でなければオリジンの種類を変えるよう案内しています。経緯や当日の迂回の手順は、DevelopersIO に詳しい記事があります（末尾の関連する記事を参照）。
+
+障害そのものは防げないので、ここでは前もって決めておけることを並べます。
+
+| 決めておくこと | 内容 |
+|---|---|
+| 切り替えるまでの待ち時間 | 接続タイムアウトは既定で 10 秒、試行は 3 回です。接続できない場合、オリジングループのセカンダリに切り替わるまで既定で**最大 30 秒**待ちます。タイムアウト（1〜10 秒）や試行回数（1〜3 回）を下げると短くできますが、接続の確立が遅いだけのときにも切り替わりやすくなります。接続できたあとに応答が返らない場合は、応答タイムアウト（既定 30 秒）が別にかかり、GET と HEAD は試行回数ぶんやり直すので、待ちはさらに長くなりえます |
+| 切り替え先 | オリジングループのセカンダリに、S3 のメンテナンスページや、VPC オリジンを使わない経路を置きます。切り替わるのは GET、HEAD、OPTIONS だけで、POST などは切り替わりません。OPTIONS は、キャッシュ対象のメソッドに入れている場合だけです |
+| キャッシュで持たせる | `Cache-Control` に `stale-if-error` を付けておくと、オリジンがエラーのときに有効期限切れのキャッシュを返せます |
+| 迂回路 | VPC オリジンを使わない経路（②など）を、障害が起きてから作るのか、閉じた状態で用意しておくのかを決めます |
+| 検知 | VPC オリジンが作る ENI について、ドキュメントにはメトリクスの記載がありません（鈴木さんの発表資料でも、提供されない点が指摘されています）。CloudFront の 5xx エラー率やオリジンのレイテンシーで異常を見ます |
+
+根拠：
+- [Origin settings（Connection attempts / Connection timeout） - Amazon CloudFront](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/DownloadDistValuesOrigin.html)
+- [Optimize high availability with CloudFront origin failover](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/high_availability_origin_failover.html)
+- [Manage how long content stays in the cache (expiration) - Amazon CloudFront](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/Expiration.html)
 
 ---
 
@@ -538,9 +566,110 @@ curl -sI http://www.example.com/ | grep -iE '^(HTTP|location)'
 
 ---
 
+## ⑨ CloudFront + Lambda Web Functions（OAC）
+
+![Lambda Web Functions OAC](/images/aws-web-ingress-patterns/10-lambda-web-functions-oac.png)
+
+2026年10月に登場した、Node.js の Web サーバー（Express や Hono など）をそのまま Lambda で動かす仕組みです。HTTPS のエンドポイントが付いてきて、複数リージョンにまたがるエンドポイントにすると、レイテンシーで近いリージョンに振り分けます。CloudFront の OAC で CloudFront 専用にする考え方は④の関数 URL と同じですが、IAM のアクション名や OAC の署名動作が違うので、④の手順はそのまま使えません。
+
+エンドポイントは、認証の種類にかかわらず**常にインターネットから届きます**。`IamAuth` にすると「誰が呼べるか」を IAM で絞れますが、ネットワークとして閉じるわけではありません。`ApplicationManaged` のまま CloudFront を前に置いても、エンドポイントのドメインを直接叩けば CloudFront と WAF を迂回できます。
+
+Web Functions 自体は Lambda が管理する基盤で動き、自分の VPC の中には置けません。VPC との関係は、受ける側と出ていく側で分けると分かりやすいです。
+
+| 方向 | どうなっているか |
+|---|---|
+| 受ける側 | エンドポイントは常にインターネットから届きます。PrivateLink のエンドポイントもありません。呼べる相手を絞る手段は `IamAuth` と CloudFront の OAC です |
+| 出ていく側（connector なし、既定） | VPC を通らずにインターネットへ出ます。送信元 IP は固定されず、VPC の中のリソースには届きません |
+| 出ていく側（connector あり） | egress network connector のサブネットにある ENI から出るので、ルートテーブルやセキュリティグループが効きます。インターネットに出るには、そのサブネットから NAT GW（IPv6 なら egress-only IGW）へのルートが必要です。使えるのは `HomeRegion` タイプのエンドポイントだけです |
+
+connector を付けても、受ける側は公開のままです。「VPC につないだから閉じた」とはならない点に注意してください。
+
+### 設定プラクティス
+
+- エンドポイントの認証の種類は **`IamAuth`** にします
+- リソースベースポリシーで、`cloudfront.amazonaws.com` に `lambda:InvokeWebFunctionEndpoint` を許可し、`aws:SourceArn` で自社のディストリビューションに限定します
+- OAC はオリジンの種類を `lambda`、署名動作を `always-amz-auth` にします。この署名動作では、ビューワーの `Authorization` ヘッダーを上書きしないので、アプリ側の認証（JWT など）も使えます。ただし GET と HEAD では、キャッシュポリシーに `Authorization` を含めないと CloudFront がこのヘッダーを外して転送します。署名は、リージョンのエンドポイントなら SigV4、グローバルのエンドポイントなら SigV4a です
+- オリジンリクエストポリシーは `AllViewerExceptHostHeader` にします（Host ヘッダーがディストリビューションのドメインのままだと 404 になります）
+- 組織で公開エンドポイントを禁止したいなら、SCP で条件キー `lambda:Request/WebFunctionAuthType` を使えます
+
+### 制約・注意点
+
+- エンドポイントには、カスタムドメインも WAF も直接は付けられません。どちらも CloudFront を前に置いて使います
+- OAC を使うキャッシュビヘイビアでは、Lambda@Edge の origin request / origin response トリガーが使えません
+- グローバルのエンドポイントにオプトインリージョンが含まれると、OAC の署名ができず 403 になります
+- egress network connector は `HomeRegion` タイプのエンドポイントでしか使えません（`PerRegion` と `MultiRegion` では使えません）。**複数リージョンへの分散と、VPC 内のリソースへの接続は両立しません**
+- ランタイムは今のところ Node.js だけです
+
+:::details 確認コマンド
+```bash
+# Lambda のドメインに署名なしで直接アクセスすると拒否される（403 など）
+curl -s -o /dev/null -w '%{http_code}\n' https://<domain-id>.<shard-id>.lambda-web.ap-northeast-1.on.aws/
+
+# CloudFront 経由では届く（200 など）
+curl -s -o /dev/null -w '%{http_code}\n' https://www.example.com/
+```
+:::
+
+根拠：
+- [AWS Lambda Web Functions - AWS Lambda](https://docs.aws.amazon.com/lambda/latest/dg/web-functions.html)
+- [Lambda Web Function endpoint access control - AWS Lambda](https://docs.aws.amazon.com/lambda/latest/dg/web-functions-endpoint-access-control.html)
+- [Configuring networking for AWS Lambda Web Functions - AWS Lambda](https://docs.aws.amazon.com/lambda/latest/dg/web-functions-networking.html)
+- [Restrict access to an AWS Lambda Web Function origin - Amazon CloudFront](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/private-content-restricting-access-to-lambda-web.html)
+
+---
+
+## 9 パターン以外の入口
+
+ここまでの 9 パターンは、CloudFront、ALB、API Gateway の REST API を中心にした受け方です。AWS には、ほかにも自分でエンドポイントを持つサービスや、リソースを直接公開する方法があります。多くは既定のままだとインターネットから届くので、棚卸しのときに見落とさないよう一覧にしておきます。
+
+### 自分でエンドポイントを持つサービス
+
+| サービス | 既定の状態 | 閉じ方と WAF |
+|---|---|---|
+| API Gateway の HTTP API | `execute-api` のドメインで誰でも呼べる | 既定のエンドポイントを無効にして、カスタムドメインだけで受けられる（カスタムドメインは公開のまま）。Private のエンドポイントやリソースポリシーはなく、WAF も直接付けられない。API キーもないので、⑤の API キーで直接アクセスを防ぐ方法は使えない |
+| AppSync（GraphQL） | 公開（`GLOBAL`）。作成後に変えられない | 作るときに `PRIVATE` にすると、VPC エンドポイント経由でしか届かない。Regional の WAF を直接付けられる |
+| Amplify Hosting | `amplifyapp.com` の既定ドメインで公開 | WAF（Global）を直接付けられる（2025年3月 GA）。既定ドメインへのアクセスを制限する設定もある |
+| App Runner | インターネットから届く | VPC からだけ届くプライベートエンドポイントにできる。WAF も付けられる。2026年4月30日から新規の利用者は受け付けていない（[What's New](https://aws.amazon.com/about-aws/whats-new/2026/03/aws-service-availability/)）ので、既存環境の棚卸し対象として見る |
+| Bedrock AgentCore の Gateway と Runtime | AWS のドメインのエンドポイントで受ける | Gateway は Regional の WAF を直接付けられ、受ける側の認証は IAM、JWT などから選ぶ（認証なしも選べるが、本番では非推奨）。Runtime には WAF を直接付けられない。前に ALB と WAF を置く場合は、リソースポリシーで VPC エンドポイント経由以外を拒否しておかないと、認証情報を持つ呼び出し元が WAF を通らずに直接呼べる |
+
+### リソースを直接公開する
+
+| 入口 | 何が問題か | 見直し先 |
+|---|---|---|
+| public IP を持つ EC2 | CloudFront のカスタムオリジンにしていても、IP やホスト名を知られると直接届く | ①（EC2 を VPC オリジンにする） |
+| internet-facing の NLB で直接受ける | エッジでの吸収も WAF もない | HTTP なら①（ただし TLS リスナーの NLB は VPC オリジンにできない）。固定 IP や TCP / UDP が必要なら⑦の形で、エンドポイントを NLB や EC2 にする |
+| S3 の静的ウェブサイトホスティングのエンドポイント | 公開読み取りと HTTP だけ。CloudFront を前に置いても OAC は使えない | ③（通常のバケットと OAC）か Amplify Hosting |
+| Lightsail のインスタンスやロードバランサー | EC2 とは別のコンソールと API で管理されるので、EC2 の棚卸しから漏れやすい | 棚卸しの対象に入れる |
+
+### AWS が代わりに ALB を作るもの
+
+構成としては①か⑧ですが、ALB を自分では作らないので、気づかないうちに公開の入口ができていることがあります。Terraform の plan にも `aws_lb` として出てきません。
+
+- **ECS Express Mode**：public サブネットを渡すと、internet-facing の ALB を作ります。サブネットを指定しないと、デフォルト VPC の public サブネットを使うので、やはり internet-facing になります
+- **ECS Gateway**：ALB を作り、最大 25 のサービスで共有します
+- **EKS の AWS Load Balancer Controller**：既定は internal で、`alb.ingress.kubernetes.io/scheme: internet-facing` を付けると公開されます
+- **Elastic Beanstalk**：ロードバランサー付きの環境では、ロードバランサーを作ります。スキームは既定で public です
+
+根拠：
+- [Disable the default endpoint for HTTP APIs - Amazon API Gateway](https://docs.aws.amazon.com/apigateway/latest/developerguide/http-api-disable-default-endpoint.html)
+- [Choose between REST APIs and HTTP APIs - Amazon API Gateway](https://docs.aws.amazon.com/apigateway/latest/developerguide/http-api-vs-rest.html)
+- [AssociateWebACL（WAF を関連付けられるリソースの一覧） - AWS WAF API Reference](https://docs.aws.amazon.com/waf/latest/APIReference/API_AssociateWebACL.html)
+- [Using AWS AppSync Private APIs](https://docs.aws.amazon.com/appsync/latest/devguide/using-private-apis.html)
+- [AWS Amplify Hosting announces Web Application Firewall Protection in general availability (2025)](https://aws.amazon.com/about-aws/whats-new/2025/03/aws-amplify-hosting-web-application-firewall-protection/)
+- [Enabling Private endpoint for incoming traffic - AWS App Runner](https://docs.aws.amazon.com/apprunner/latest/dg/network-pl.html)
+- [Protecting your gateway with AWS WAF - Amazon Bedrock AgentCore](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/gateway-waf.html)
+- [Set up inbound authorization for your gateway - Amazon Bedrock AgentCore](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/gateway-inbound-auth.html)
+- [Securing Amazon Bedrock AgentCore Runtime with AWS WAF (AWS Blog)](https://aws.amazon.com/blogs/machine-learning/securing-amazon-bedrock-agentcore-runtime-with-aws-waf/)
+- [Restrict access to an Amazon S3 origin（ウェブサイトエンドポイントでは OAC を使えない）](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/private-content-restricting-access-to-s3.html)
+- [Resources created by Amazon ECS Express Mode services](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/express-service-work.html)
+- [Amazon ECS Gateway](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/gateway-overview.html)
+- [AWS Load Balancer Controller: Ingress annotations（GitHub）](https://github.com/kubernetes-sigs/aws-load-balancer-controller/blob/master/docs/guide/ingress/annotation.md)
+
+---
+
 ## WAF の位置付け
 
-ここまでの①〜⑧は「誰がオリジンに届くか（経路）」の話でした。WAF は層が違い、「届いたリクエストの中身を検査する」ものです。
+ここまでの①〜⑨は「誰がオリジンに届くか（経路）」の話でした。WAF は層が違い、「届いたリクエストの中身を検査する」ものです。
 
 ![防御レイヤーとWAFの位置付け](/images/aws-web-ingress-patterns/09-defense-layers.png)
 
@@ -548,7 +677,7 @@ curl -sI http://www.example.com/ | grep -iE '^(HTTP|location)'
 - **C・D だけ（経路の限定だけ）の場合**：正規の CloudFront を通って来る SQL インジェクションや HTTP flood は止まりません
 - **基本形は A＋B＋C＋D** です（A の Shield Standard は CloudFront や GA を使えば自動で効きます）。E（リージョンの WAF）は、必要なときに足します
 
-WAF の web ACL は CloudFront（Global）と ALB・API Gateway の REST API など（Regional）に付けられますが、**NLB・Global Accelerator・S3・Lambda 関数 URL・API Gateway の HTTP API には直接付けられません**。また AWS は、公開 Web アプリでは**制約がない限り CloudFront と組み合わせて WAF を置く**ことを推奨しています。
+WAF の web ACL は CloudFront（Global）と ALB・API Gateway の REST API など（Regional）に付けられますが、**NLB・Global Accelerator・S3・Lambda 関数 URL・Lambda Web Functions・API Gateway の HTTP API には直接付けられません**。また AWS は、公開 Web アプリでは**制約がない限り CloudFront と組み合わせて WAF を置く**ことを推奨しています。
 
 ### パターンごとの WAF の置き場所
 
@@ -562,6 +691,7 @@ WAF の web ACL は CloudFront（Global）と ALB・API Gateway の REST API な
 | ⑥ Private API | CloudFront（Global） | 経路は①と同じ |
 | ⑦ Global Accelerator | ALB（Regional） | GA には付けられない。クライアント IP が保持されるので、IP ベースのルールがそのまま効く |
 | ⑧ 公開 ALB 直受け | ALB（Regional）※必須 | 唯一の L7 防御。Shield Advanced も検討 |
+| ⑨ Lambda Web Functions（OAC） | CloudFront（Global） | エンドポイントには付けられない |
 
 WAF の置き場所ごとの注意点（ALB 側では CloudFront の IP が見える、ボディを検査できるサイズの違い、内部エラー時の挙動）や、ルールの組み方・運用は、別の記事にまとめました。
 
@@ -597,7 +727,8 @@ aws cloudfront get-distribution-config --id E123EXAMPLE \
 
 - 「ドメインが知られたら迂回される」問題は、**秘密ヘッダーで照合すれば防げます**。ただしそれはフォールバックで、ローテーションなど運用の負担が残ります
 - CT Log によってホスト名は知られる前提です。**「隠す」より「届かない」構成**を選びましょう
-- 新規構築なら、まず **VPC オリジン（ALB / NLB / EC2）と OAC（S3 / Lambda 関数 URL）** を検討します。fail-closed で決定論的な、運用しやすい構成になります
+- 新規構築なら、まず **VPC オリジン（ALB / NLB / EC2）と OAC（S3 / Lambda 関数 URL / Lambda Web Functions）** を検討します。fail-closed で決定論的な、運用しやすい構成になります
+- VPC オリジンも止まることはあります。切り替えるまでの待ち時間と切り替え先は、先に決めておきます
 - 既存の公開 ALB 構成は、ステージングディストリビューションで検証しながら VPC オリジンへ段階的に移行できます
 
 ## 関連する記事
@@ -606,4 +737,10 @@ aws cloudfront get-distribution-config --id E123EXAMPLE \
 
 - [Amazon CloudFront のパブリックオリジンからプライベート VPC オリジンへの移行（AWS ブログ）](https://aws.amazon.com/jp/blogs/news/migrate-amazon-cloudfront-public-origins-to-private-vpc-origins)
 - [カスタムヘッダー方式の CloudFront + ALB 構成を VPC オリジンに移行してみた（DevelopersIO）](https://dev.classmethod.jp/articles/cloudfront-alb-vpc/)
+
+2026年7月の VPC オリジンの障害と、その後の構成の変化は、次の記事と発表資料が参考になります。
+
+- [CloudFront VPCオリジン障害をInter-Region VPCピアリングで迂回してみた（DevelopersIO）](https://dev.classmethod.jp/articles/cloudfront-vpc-origin-failure-inter-region-vpc-peering-bypass/)
+- [CloudFront VPCオリジン障害(2026-07-16)で約30秒のタイムアウト待ちが発生していたことをログから確認してみた（DevelopersIO）](https://dev.classmethod.jp/ja/articles/cloudfront-vpc-origin-incident-20260716-log-analysis/)
+- [パブリックサブネットを持たない Web配信基盤の現在地（鈴木 亮さん、JAWS festa 2026）](https://www.docswell.com/s/suzryo/KDMX88-2026-11-07-160134)
 

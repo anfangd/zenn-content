@@ -54,7 +54,7 @@ Web、DNS、メール、踏み台は、VPC の外のマネージドサービス�
 
 VPC に public サブネットを 1 つも作らない構成です。
 
-- **入口**：CloudFront と WAF で受け、[VPC オリジン](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/private-content-vpc-origins.html)でプライベートサブネットの内部 ALB に届けます。VPC オリジンは [2024 年 11 月に登場](https://aws.amazon.com/about-aws/whats-new/2024/11/amazon-cloudfront-vpc-origins/)しました。それまでは、VPC の中のオリジンを使うなら public サブネットに置き、アクセス制御を自分で作る必要がありました
+- **入口**：CloudFront と WAF で受け、[VPC オリジン](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/private-content-vpc-origins.html)でプライベートサブネットの内部 ALB に届けます。VPC オリジンは [2024 年 11 月に登場](https://aws.amazon.com/about-aws/whats-new/2024/11/amazon-cloudfront-vpc-origins/)しました。それまでは、VPC の中のオリジンを使うなら public サブネットに置き、アクセス制御を自分で作る必要がありました。2026 年 10 月には[デュアルスタックにも対応](https://aws.amazon.com/about-aws/whats-new/2026/10/cloudfront-vpc-origin-dualstack/)し、IPv6 のためにオリジンを public に出す必要もなくなりました
 - **出口**：[Regional NAT GW](https://docs.aws.amazon.com/vpc/latest/userguide/nat-gateways-regional.html) を使います。2025 年 11 月に出た機能で、NAT GW をサブネットではなく VPC に作るので、置き場所としての public サブネットが要りません
 - **管理**：Session Manager を使います。インバウンドのポートを開ける必要はありません。ただし SSM への外向きの経路（NAT GW か VPC エンドポイント）は要ります
 
@@ -67,6 +67,16 @@ Regional NAT GW の[ドキュメント](https://docs.aws.amazon.com/vpc/latest/u
 - Regional NAT GW が新しい AZ に広がるまで時間がかかります。[発表ブログ](https://aws.amazon.com/blogs/networking-and-content-delivery/introducing-amazon-vpc-regional-nat-gateway/)では平均 15〜20 分、最大 60 分です。その間の通信は、既存の AZ の NAT が AZ をまたいで処理すると[ドキュメント](https://docs.aws.amazon.com/vpc/latest/userguide/nat-gateways-regional.html)に書かれています
 - サブネットに紐づかないので、サブネット単位の設定は効きません
 
+### ① の先には、アプリ用の VPC を持たない形もある
+
+① は、アプリを VPC の中に置く前提です。2026 年 10 月に出た Lambda Web Functions を CloudFront の裏に置くと、Web アプリを動かすための VPC も、外に出るための NAT GW も持たずに済みます。外向きの通信は、既定では VPC を通らずに直接インターネットへ出るからです（[ドキュメント](https://docs.aws.amazon.com/lambda/latest/dg/web-functions-networking.html)）。
+
+ただし、VPC の中のデータベースなどに届けたいなら、egress network connector で VPC につなぐ必要があります。egress network connector を使えるのは `HomeRegion` タイプのエンドポイントだけで、複数リージョンに振り分けるエンドポイントでは使えません（[ドキュメント](https://docs.aws.amazon.com/lambda/latest/dg/web-functions-networking.html)）。複数リージョンに分散しつつ VPC の中のデータを使いたいなら、つなぎ方を別に考える必要があります。
+
+もう 1 つ気をつけたいのは、connector を付けると外向きの通信が VPC を通ることです。connector 自体はインターネットへの出口にならないので、公開の IPv4 に出るには、connector のサブネットから NAT GW へのルートが必要です（IPv6 なら egress-only IGW）。行き先が VPC 内のリソースや VPC エンドポイントだけなら、NAT GW は要りません。なお、connector で変わるのは出ていく側だけで、受ける側のエンドポイントはどちらの場合も VPC の外にあり、インターネットから届きます。
+
+アクセスの多くが海外から来るサイトで、VPC オリジンの構成からこの形に移った事例が、JAWS festa 2026 で発表されています（関連する記事を参照）。CloudFront からの守り方は、[9 パターン記事](https://zenn.dev/anfangd/articles/aws-web-ingress-origin-protection)の ⑨ にまとめました。
+
 ### ② 小さくする型では、public サブネットに機器だけを置く
 
 public サブネットは残すものの、置くのはマネージドな入口と出口の機器だけで、EC2 は置かない構成です。
@@ -78,7 +88,7 @@ public サブネットは残すものの、置くのはマネージドな入口�
 
 HTTP 以外の公開でも、② を避ける道はあります。[Global Accelerator](https://docs.aws.amazon.com/global-accelerator/latest/dg/secure-vpc-connections.html) は、内部 ALB や NLB、プライベートサブネットの EC2 を直接エンドポイントにできます。LB や EC2 に public IP は要らず、サブネットに IGW へのルートも要りません。SFTP なら Transfer Family に任せる手もあります。
 
-② になりやすいのは、むしろ意図していない場合です。EKS や ECS で Ingress コントローラーに任せていると、internet-facing の ALB が作られ、気づかないうちに public サブネットに入口ができていることがあります。
+② になりやすいのは、むしろ意図していない場合です。EKS の Ingress コントローラーや ECS の機能に ALB の作成を任せていると、気づかないうちに public サブネットに入口ができていることがあります。たとえば ECS Express Mode は、public サブネットを渡すと internet-facing の ALB を作ります（[ドキュメント](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/express-service-work.html)）。
 
 ### ③ 集約する型では、アカウントが境界になる
 
@@ -152,12 +162,13 @@ VPC オリジンの通信は IGW をルートとしては使いませんが、BP
 
 IGW が必要な理由や、BPA と VPC オリジンの関係は、前に書いた記事でも扱っています。この記事は、それを DMZ の役割の行き先という切り口で整理し直し、出口側も Regional NAT GW で public サブネットが要らなくなった点を足したものです。
 
-- [AWSでWebリクエストを受ける8パターンと「オリジンを裸にしない」設定プラクティス](https://zenn.dev/anfangd/articles/aws-web-ingress-origin-protection)
+- [AWSでWebリクエストを受ける9パターンと「オリジンを裸にしない」設定プラクティス](https://zenn.dev/anfangd/articles/aws-web-ingress-origin-protection)
 
 「public サブネットをなくす」構成そのものは、次の記事でも詳しく紹介されています。
 
 - [Amazon VPC からパブリックサブネットを無くしたい!（サーバーワークス）](https://blog.serverworks.co.jp/no-public-subnet)
 - [パブリックサブネットレスなVPCにECS Express Mode環境を構築してみた（DevelopersIO）](https://dev.classmethod.jp/articles/ecs-express-mode-public-subnet-less/)
+- [パブリックサブネットを持たない Web配信基盤の現在地（鈴木 亮さん、JAWS festa 2026）](https://www.docswell.com/s/suzryo/KDMX88-2026-11-07-160134)
 
 ## 参考
 
@@ -178,6 +189,6 @@ IGW が必要な理由や、BPA と VPC オリジンの関係は、前に書い�
   - VPC BPA を ingress-only で有効にすると VPC オリジンが止まるか、除外で戻るか
   - Regional NAT GW の拡張中に、新しい AZ の通信が AZ をまたいで出るか（Flow Logs で確認）
 - サーバーワークスの記事のリンク先が実在するか確認する（レビュー時に取得できなかった）
-- 【はじめに】には、8 パターン記事のあとで、なぜ DMZ の切り口で書き直すのかを入れると続編として読める
+- 【はじめに】には、9 パターン記事のあとで、なぜ DMZ の切り口で書き直すのかを入れると続編として読める
 - 「② になりやすいのは EKS/ECS の Ingress コントローラー」は一般論。具体例を足すか検討
 -->
