@@ -24,8 +24,6 @@ published: true
 
 @[tweet](https://twitter.com/nasub7373/status/2117957893232451709)
 
-3 つ目の「Host ヘッダー付きの攻撃」は、CloudFront を通らずに ALB へ直接リクエストを送る攻撃のことです。まず DNS で ALB の IP アドレスを引き、その IP アドレスに TCP / TLS で直接つなぎます。そのうえで、HTTP リクエストの Host ヘッダーに本来のドメイン名を入れます。ALB は Host ヘッダーを見てどのサイトに振り分けるかを決めているので、リクエストは CloudFront に置いた WAF を通らずに、本物のサイトへ届きます。CT Log は、その入り口になるホスト名を探すのに使われます（詳しくは[CT Log の記事](https://zenn.dev/anfangd/articles/ct-log-hostname-exposure-ca-ct)）。
-
 @[tweet](https://twitter.com/___nix___/status/2117996284783300621)
 
 どちらも重要な指摘です。一方で、2024年11月に **CloudFront VPC オリジン** が登場してから、選べる構成はかなり変わっています。
@@ -97,7 +95,9 @@ CT は、公的な CA（Certificate Authority：認証局）が発行した TLS 
 
 **DNS を公開していなくても、公的な証明書を取った時点でホスト名は知られる** と考えておきましょう。ワイルドカード証明書で個別のホスト名を隠すことはできますが、それは推測しにくくするだけの隠蔽策です。本筋は「名前を知られても届かない」構成にすることです。
 
-CA と CT の仕組み（構成・発行・検証・監視）は、図解付きで別の記事にまとめました。
+冒頭の投稿にあった「Host ヘッダー付きの攻撃」は、こうして知られたホスト名を使い、CloudFront を通らずに ALB へ直接リクエストを送る攻撃のことです。まず DNS で ALB の IP アドレスを引き、その IP アドレスに TCP / TLS で直接つなぎます。そのうえで、HTTP リクエストの Host ヘッダーに本来のドメイン名を入れます。ALB は Host ヘッダーを見てどのサイトに振り分けるかを決めているので、リクエストは CloudFront に置いた WAF を通らずに、本物のサイトへ届きます。
+
+CA と CT の仕組み（構成・発行・検証・監視）と、この攻撃を層ごとに分けた図は、別の記事にまとめました。
 
 https://zenn.dev/anfangd/articles/ct-log-hostname-exposure-ca-ct
 
