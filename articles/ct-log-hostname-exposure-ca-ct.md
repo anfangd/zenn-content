@@ -48,6 +48,8 @@ CT は、公的な CA が発行した TLS 証明書を、**誰でも監査でき
 
 ![ルートストアの CA はどれも、どのドメインの証明書でも発行できる](/images/certificate-transparency-ct-log/ca-ct-00-why-ct.png)
 
+ふだんは、運営者が使っている CA（図の CA-A）が発行した証明書をサーバーが見せ、ブラウザは鎖を確かめて接続します。ところが、ほかの CA（図の CA-B）が同じドメインの証明書を出しても、ブラウザは同じように通してしまいます。
+
 そのため、どこか 1 社が侵害されたり誤発行したりすると、偽の証明書でも本物と区別がつかなくなります。実際に、2011 年にはオランダの CA である DigiNotar が侵害され、`google.com` の偽の証明書がイランの利用者の通信の盗み見に使われました。2015 年には、Symantec が Google に無断で `google.com` のプレ証明書を発行していたことが、CT ログから見つかっています。
 
 - [An update on attempted man-in-the-middle attacks - Google Security Blog（2011）](https://security.googleblog.com/2011/08/update-on-attempted-man-in-middle.html)
