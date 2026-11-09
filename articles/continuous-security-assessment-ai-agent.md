@@ -8,6 +8,8 @@ published: true
 
 :::message
 この記事は、Claude と一緒に公開されているフレームワークや AWS のドキュメントを調べ、整理した内容をまとめたものです。各記述の根拠は、記事中のリンク先で確認できます。
+
+2026 年 11 月に、同じ課題に向き合っている製品についての短い節（「製品も同じ方向に動いている」）を追記しました。
 :::
 
 ## はじめに
@@ -25,22 +27,23 @@ published: true
 
 ## TL;DR
 
-- セキュリティの基準は、業務端末や営業情報まで含む**全社の情報セキュリティ基準**と、開発・提供するシステムとそれを運用保守するチーム向けの**システムのセキュリティ基準**に分かれます。この記事は後者を扱います
-- システムのチェックは、**システムのセキュリティ基準（何を守るかを決めたもの）**、**リリース前のレビュー**、**定期的なアセスメント**の 3 つで構成されることが多いです。弱いのは、リリース後から次のアセスメントまでの「見えない期間」です
-- NIST SP 800-137 は、継続的モニタリングの「継続的」を**リスクに基づく判断を支えられるだけの頻度**と定義しています。毎日でなくてもいいけれど、年 1 回が十分とは限りません
-- 項目を「**何を証拠に判断するか**」で、設定・文書・運用の実態の 3 つに分けると、自動化できる範囲と頻度がはっきりします
-- **決定的なルール**（Config ルール、Security Hub、Rego）は変更のたびに回し、**AI エージェント**は定期的にリソースや文書をまたいで探索させます。見つかった新しいパターンはルールに落として固めます
-- エージェントは**読み取り専用**にし、**判断の根拠を残させ**、**最終判断は人**がします。読んだ文書の中の指示に従わないようにする対策も必要です
+- システムのチェックは、**システムのセキュリティ基準**、**リリース前のレビュー**、**定期的なアセスメント**の 3 つでできていることが多いです。弱いのは、リリース後から次のアセスメントまでの「見えない期間」です
+- 項目を「**何を証拠に判断するか**」（設定・文書・運用の実態）で分けると、自動化できる範囲と頻度が決まります
+- **決定的なルール**は変更のたびに、**AI エージェント**は定期的に回します。エージェントが見つけた新しいパターンは、ルールに落とします
+- Wiz などの CNAPP（クラウドの設定や脆弱性をまとめて見る製品）や Security Hub の exposure findings も設定の組み合わせを見ますが、文書と運用の実態は対象外です
+- エージェントは読み取り専用にし、最終判断は人がします
 
 ## 一般的にはどうなっているのか
+
+システムのセキュリティは、ふつう 3 つの仕組みで確かめます。何を守るかを決めた**基準**、本番に出す前の**レビュー**、出したあとの**定期的なアセスメント**です。レビューもアセスメントも「基準を満たしているか」を見る場なので、まずは基準から整理します。
 
 ![セキュリティのチェックはどこで行われているか](/images/continuous-security-assessment-ai-agent/assessment-gates.png)
 
 ### 何を守るかは、全社の基準とシステムの基準の 2 段で決める
 
-あなたの組織には、情報セキュリティの基本方針と、その下で「何を、どのレベルで求めるか」を具体的に決めた基準がありますか？
+あなたの組織には、情報セキュリティの基本方針と、その下で「何を、どのレベルで求めるか」を具体的に決めた基準がありますか？ あるとしたら、それは業務端末の使い方からシステムの設定までを 1 つにまとめたものですか？ それとも、システム向けの基準が別にありますか？
 
-ここで分けて考えたいのが、基準の範囲と抽象度です。
+この記事では、基準を**対象の範囲**と**抽象度**で 2 つに分けて考えます。
 
 - **全社の情報セキュリティ基準**：会社が扱う情報全体が対象です。業務端末の使い方、営業資料や顧客情報の取り扱い、入退室、教育なども含みます。システムを作らない部署にも関わるので、抽象度は高めです
 - **システムのセキュリティ基準**：開発して提供するシステムと、それを開発・運用保守するチームや体制が満たすべき水準です。公開経路の制限、暗号化、ログといった設定だけでなく、オンコール、権限の付与と剥奪、変更の手順、障害対応なども、もう一段具体的に決めます
@@ -185,6 +188,12 @@ https://zenn.dev/anfangd/articles/cloudfront-alb-origin-exposure-audit
 
 このループを回すと、ルールが少しずつ育っていきます。**発見はエージェント、再発防止はルール**という分担です。
 
+### 製品も同じ方向に動いている
+
+組み合わせの穴を見つけるのは、製品の側でも取り組まれています。CNAPP と呼ばれる製品（Wiz など）や AWS Security Hub の exposure findings は、設定・権限・ネットワーク・脆弱性をつなげて、攻撃経路として見せます。ただし、CNAPP や exposure findings が見るのは設定の組み合わせまでです。設計書や体制表といった文書と、運用の実態は対象外なので、ここはエージェントと人の仕事として残ります。製品がどこまで見てくれるかは、別の記事にまとめました。
+
+https://zenn.dev/anfangd/articles/continuous-exposure-products-coverage
+
 ## 回し方
 
 ### 頻度の決め方
@@ -264,6 +273,12 @@ https://zenn.dev/anfangd/articles/cloudfront-alb-origin-exposure-audit
 3. **報告のフォーマットとトリアージの流れを固める**：ここが決まってから対象を広げる
 4. **証拠の種類の表を育てる**：対象を広げるたびに、項目と証拠の出どころを表に足していく
 
+AWS が中心なら、Security Hub を有効にし、exposure findings をエージェントの入力にするところから始めるのが手軽です。exposure findings は新しいシグナルが入るたびにほぼリアルタイムで更新されるので、週 1 回の棚卸しでも最新の状態を読めます。ただし、主な対象になるリソースの種類は限られていて、ALB は入っていません（2026 年 11 月時点）。
+
+- [Generating exposure findings - AWS Security Hub](https://docs.aws.amazon.com/securityhub/latest/userguide/exposure-findings-generate.html)
+- [AWS Security Hub now generally available with near real-time risk analytics (2025)](https://aws.amazon.com/about-aws/whats-new/2025/12/security-hub-near-real-time-risk-analytics)
+- [Supported resource types for exposure findings in Security Hub](https://docs.aws.amazon.com/securityhub/latest/userguide/exposure-findings-supported-resources.html)
+
 ## 効果をどう測るか
 
 仕組みを入れたら、効果を測らないと続きません。次のような指標が使えます。
@@ -332,3 +347,4 @@ https://zenn.dev/anfangd/articles/cloudfront-alb-origin-exposure-audit
 - [Security pillar - AWS Well-Architected Framework](https://docs.aws.amazon.com/wellarchitected/latest/security-pillar/welcome.html)
 - [AWS Audit Manager availability change](https://docs.aws.amazon.com/audit-manager/latest/userguide/audit-manager-availability-change.html)
 - [LLM01:2025 Prompt Injection - OWASP Gen AI Security Project](https://genai.owasp.org/llmrisk/llm01-prompt-injection/)
+- [Exposure findings in Security Hub - AWS Security Hub](https://docs.aws.amazon.com/securityhub/latest/userguide/exposure-findings.html)
