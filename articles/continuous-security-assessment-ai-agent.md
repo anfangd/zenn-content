@@ -8,6 +8,8 @@ published: true
 
 :::message
 この記事は、Claude と一緒に公開されているフレームワークや AWS のドキュメントを調べ、整理した内容をまとめたものです。各記述の根拠は、記事中のリンク先で確認できます。
+
+2026年11月に、同じ課題に向き合っている枠組みと製品の節（「業界も、年 1 回の点検から継続的なサイクルに移っている」）を追記しました。
 :::
 
 ## はじめに
@@ -30,6 +32,7 @@ published: true
 - NIST SP 800-137 は、継続的モニタリングの「継続的」を**リスクに基づく判断を支えられるだけの頻度**と定義しています。毎日でなくてもいいけれど、年 1 回が十分とは限りません
 - 項目を「**何を証拠に判断するか**」で、設定・文書・運用の実態の 3 つに分けると、自動化できる範囲と頻度がはっきりします
 - **決定的なルール**（Config ルール、Security Hub、Rego）は変更のたびに回し、**AI エージェント**は定期的にリソースや文書をまたいで探索させます。見つかった新しいパターンはルールに落として固めます
+- CTEM や CNAPP、AWS Security Hub の exposure findings など、**設定の組み合わせを継続的に見る**枠組みと製品はすでにあります。ただし、カバーするのは技術的な露出です。**文書と運用の実態**は、製品の外に残ります
 - エージェントは**読み取り専用**にし、**判断の根拠を残させ**、**最終判断は人**がします。読んだ文書の中の指示に従わないようにする対策も必要です
 
 ## 一般的にはどうなっているのか
@@ -185,6 +188,81 @@ https://zenn.dev/anfangd/articles/cloudfront-alb-origin-exposure-audit
 
 このループを回すと、ルールが少しずつ育っていきます。**発見はエージェント、再発防止はルール**という分担です。
 
+## 業界も、年 1 回の点検から継続的なサイクルに移っている
+
+ここまでの考え方は、この記事だけのものではありません。同じ課題に向き合っている枠組みと製品を見ておきます。
+
+### CTEM は、点検を「範囲を決めて、直すまで」のサイクルにする
+
+Gartner は、**継続的な脅威エクスポージャー管理（CTEM）** という考え方を打ち出しています。デジタルと物理の資産について、届くか・露出しているか・悪用できるかを継続的に評価する、体系的なアプローチです。範囲をインフラの部品ではなく、攻撃の経路や事業のプロジェクトに合わせて決めるのが特徴です。
+
+CTEM は、範囲の決定（scoping）・発見（discovery）・優先順位付け（prioritization）・検証（validation）・対応の実行（mobilization）の 5 段階を繰り返すサイクルとして説明されます。製品ではなくプログラムの枠組みで、それを支える製品の分類として、Gartner は **Exposure Assessment Platforms（EAP）** を置いています。
+
+この記事のループに当てはめると、エージェントの棚卸しが「発見」、人のトリアージが「優先順位付け」、チケットとルール化が「対応の実行」にあたります。
+
+- [Gartner Identifies the Top Cybersecurity Trends for 2024](https://www.gartner.com/en/newsroom/press-releases/2024-02-22-gartner-identifies-top-cybersecurity-trends-for-2024)
+- [Exposure Assessment Platforms Reviews and Ratings - Gartner](https://www.gartner.com/reviews/market/exposure-assessment-platforms)
+
+### CNAPP は、組み合わせの穴をグラフで見つけにいく
+
+「決定的なルールは、リソースをまたいだ組み合わせが苦手」と書きました。この弱点に、製品としていちばん正面から取り組んでいるのが **CNAPP（Cloud-Native Application Protection Platform）** です。CSPM（設定の評価）、CWPP（ワークロードの保護）、CIEM（権限の管理）などを 1 つの製品にまとめたものです。
+
+CNAPP を支えている技術は、主に次の 3 つです。
+
+| 技術 | やっていること | 弱いところ |
+|---|---|---|
+| エージェントレスのスキャン | クラウドの API でディスクのスナップショットを取り、ワークロードに何も入れずに脆弱性や秘密情報を調べる。止まっている VM も見られる | 定期的なスキャンなので、メモリ上だけの脅威やリアルタイムの検知には向かない |
+| セキュリティグラフ | リソース・ID・権限・ネットワーク経路・脆弱性を 1 つのグラフに載せ、重要な資産に届く**攻撃経路**を探す。低リスクの問題が連鎖して高リスクになる組み合わせ（toxic combination）を挙げる | グラフに載るのは、製品が読める設定やログだけ |
+| ランタイムのセンサー | eBPF などで稼働中のワークロードの動きを取り、グラフ上の経路が本当に悪用できるかを確かめる | エージェントを入れる手間がかかる |
+
+代表的なのが Wiz で、Security Graph を中心に据えています。ほかに、Palo Alto Networks の Cortex Cloud（旧 Prisma Cloud）、Microsoft Defender for Cloud、CrowdStrike Falcon Cloud Security、エージェントレスのスキャンの先駆けである Orca Security などがあります。
+
+AWS にも、近い機能があります。**AWS Security Hub の exposure findings** は、Security Hub CSPM、Inspector、GuardDuty、Macie などのシグナルを関連付けて、1 つの「露出」として出します。攻撃経路のグラフも見られます。2026 年 7 月には、侵害されたときに届く範囲と、各段階の権限を示す影響分析も加わりました。
+
+- [What is attack path analysis? - Wiz](https://www.wiz.io/academy/detection-and-response/attack-path-analysis)
+- [Orca SideScanning - Orca Security](https://orca.security/platform/agentless-sidescanning-technology/)
+- [Exposure findings in Security Hub - AWS Security Hub](https://docs.aws.amazon.com/securityhub/latest/userguide/exposure-findings.html)
+- [AWS Security Hub adds impact analysis for exposure findings (2026)](https://aws.amazon.com/about-aws/whats-new/2026/07/impact-analysis-aws-security-hub/)
+
+### 見つけるだけでなく、直すところまでエージェントが担い始めている
+
+2026 年に入って、製品の側にもエージェントが入ってきました。
+
+- **Wiz**：3 つの AI エージェントを出しています。Red Agent は悪用できるリスクを探して確かめ、Blue Agent は脅威の調査を早め、Green Agent はリスクを調べて修正を提案・実行します。Claude Code や Cursor 向けのスキルも用意し、コーディングエージェントが Security Graph の検出結果を取り込んで、コードを直せるようにしています
+- **AWS**：Security Hub MCP App をプレビューで出しています。Claude Desktop から、exposure findings の攻撃経路や関連する検出結果を調べられます。ツールはすべて読み取り専用です
+
+この記事で「エージェントは読み取り専用、直すのは人が承認したあとの別の仕組み」と書いたのに対して、製品は修正の実行まで踏み込み始めています。どこまで任せるかは、組織ごとに決めることになります。
+
+- [Wiz at Black Hat 2026: Driving AI Threat Readiness](https://www.wiz.io/blog/wiz-at-black-hat-2026)
+- [Next '26: Redefining security for the AI era with Google Cloud and Wiz](https://cloud.google.com/blog/products/identity-security/next26-redefining-security-for-the-ai-era-with-google-cloud-and-wiz)
+- [AWS Security Hub MCP App brings exposure findings into your AI-assisted workflow (Preview)](https://aws.amazon.com/about-aws/whats-new/2026/07/aws-security-hub-mcp-app/)
+
+### 証拠を機械で読める形にする流れもある
+
+監査の側でも、同じ方向の動きがあります。米国政府のクラウド認証制度 FedRAMP は、2026 年 6 月に公開した Consolidated Rules for 2026 で、認証後も 3 か月ごとに継続的なモニタリングの報告を出すよう求めています。報告や証拠はできるだけ機械で読める形で受け取る方針で、その形式として NIST の OSCAL を指定しています。
+
+検出結果の形式では、**OCSF（Open Cybersecurity Schema Framework）** が広がっています。ベンダーに依存しない、セキュリティのイベントと検出結果のスキーマです。Security Hub の検出結果も OCSF で出力されます。エージェントに検出結果を読ませるなら、入力の形式がそろっているほど扱いやすくなります。
+
+- [Collaborative Continuous Monitoring - FedRAMP Consolidated Rules for 2026](https://www.fedramp.gov/2026/reference/collaborative-continuous-monitoring/)
+- [M-24-15 Section V. Automation and Efficiency - FedRAMP](https://www.fedramp.gov/2026/authority/m-24-15/automation/)
+- [Security Hub and the Open Cybersecurity Schema Framework (OCSF)](https://docs.aws.amazon.com/securityhub/latest/userguide/securityhub-ocsf.html)
+
+### それでも、文書と運用の実態は製品の外に残る
+
+CNAPP や exposure findings が強いのは、「証拠の種類」の表でいう**設定・IaC** の列です。文書と運用の実態は、ほとんど対象になりません。
+
+| 証拠の種類 | CNAPP・exposure findings | この記事のエージェント |
+|---|---|---|
+| 設定・IaC | 得意。組み合わせも攻撃経路として出す | 製品の結果を入力として読み、製品が見ていない組み合わせを補う |
+| 文書 | 対象外 | 設計書や体制表と、実際の構成とのずれを指摘する |
+| 運用の実態 | 対象外 | 記録（チケット、ログ）から一部を拾う。残りは人へのヒアリング |
+
+設定の列でも、すべてが拾えるとは限りません。たとえば exposure findings が対象にするリソースの種類（2026 年 11 月時点）には、EC2、Lambda、S3 などはありますが、ALB は入っていません。前の記事の「CloudFront の裏の ALB」の穴は、製品の対象リソースの外にある可能性があります（試していません）。
+
+なので、製品とエージェントは置き換えの関係ではありません。製品が出す設定の検出結果を、エージェントの入力の 1 つにする組み合わせ方ができます。
+
+- [Supported resource types for exposure findings in Security Hub](https://docs.aws.amazon.com/securityhub/latest/userguide/exposure-findings-supported-resources.html)
+
 ## 回し方
 
 ### 頻度の決め方
@@ -264,6 +342,8 @@ https://zenn.dev/anfangd/articles/cloudfront-alb-origin-exposure-audit
 3. **報告のフォーマットとトリアージの流れを固める**：ここが決まってから対象を広げる
 4. **証拠の種類の表を育てる**：対象を広げるたびに、項目と証拠の出どころを表に足していく
 
+AWS が中心なら、Security Hub を有効にし、exposure findings をエージェントの入力にするところから始めるのが手軽です。exposure findings は 6 時間ごとに作られるので、週 1 回の棚卸しには十分間に合います。
+
 ## 効果をどう測るか
 
 仕組みを入れたら、効果を測らないと続きません。次のような指標が使えます。
@@ -283,6 +363,10 @@ https://zenn.dev/anfangd/articles/cloudfront-alb-origin-exposure-audit
 ### 最終判断は人がする
 
 エージェントは「下準備をする役」です。システムのセキュリティ基準を満たしているかを判断し、リスクを受容するかを決めるのは人です。監査で説明責任を負えるのは人だけだからです。
+
+Gartner も、AI には大量の分析やトリアージを任せ、重要な判断の権限は人が持つ「human-on-the-loop」の形を勧めています。
+
+- [When Reactive Security Falls Behind AI-Driven Threats - Gartner](https://www.gartner.com/en/articles/preemptive-cybersecurity-solutions)
 
 ### エージェントの権限を絞る
 
@@ -332,3 +416,7 @@ https://zenn.dev/anfangd/articles/cloudfront-alb-origin-exposure-audit
 - [Security pillar - AWS Well-Architected Framework](https://docs.aws.amazon.com/wellarchitected/latest/security-pillar/welcome.html)
 - [AWS Audit Manager availability change](https://docs.aws.amazon.com/audit-manager/latest/userguide/audit-manager-availability-change.html)
 - [LLM01:2025 Prompt Injection - OWASP Gen AI Security Project](https://genai.owasp.org/llmrisk/llm01-prompt-injection/)
+- [Gartner Identifies the Top Cybersecurity Trends for 2024（CTEM）](https://www.gartner.com/en/newsroom/press-releases/2024-02-22-gartner-identifies-top-cybersecurity-trends-for-2024)
+- [Exposure findings in Security Hub - AWS Security Hub](https://docs.aws.amazon.com/securityhub/latest/userguide/exposure-findings.html)
+- [FedRAMP Consolidated Rules for 2026](https://www.fedramp.gov/2026/)
+- [Open Cybersecurity Schema Framework (OCSF)](https://schema.ocsf.io/)
