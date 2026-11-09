@@ -30,7 +30,7 @@ published: true
 - システムのチェックは、**システムのセキュリティ基準**、**リリース前のレビュー**、**定期的なアセスメント**の 3 つでできていることが多いです。弱いのは、リリース後から次のアセスメントまでの「見えない期間」です
 - 項目を「**何を証拠に判断するか**」（設定・文書・運用の実態）で分けると、自動化できる範囲と頻度が決まります
 - **決定的なルール**は変更のたびに、**AI エージェント**は定期的に回します。エージェントが見つけた新しいパターンは、ルールに落とします
-- CNAPP などの製品が見るのは、設定の組み合わせまでです。文書と運用の実態は残ります
+- Wiz などの CNAPP や Security Hub の exposure findings も設定の組み合わせを見ますが、文書と運用の実態は対象外です
 - エージェントは読み取り専用にし、最終判断は人がします
 
 ## 一般的にはどうなっているのか
@@ -275,7 +275,10 @@ https://zenn.dev/anfangd/articles/cloudfront-alb-origin-exposure-audit
 3. **報告のフォーマットとトリアージの流れを固める**：ここが決まってから対象を広げる
 4. **証拠の種類の表を育てる**：対象を広げるたびに、項目と証拠の出どころを表に足していく
 
-AWS が中心なら、Security Hub を有効にし、exposure findings をエージェントの入力にするところから始めるのが手軽です。exposure findings は 6 時間ごとに作られるので、週 1 回の棚卸しには十分間に合います。
+AWS が中心なら、Security Hub を有効にし、exposure findings をエージェントの入力にするところから始めるのが手軽です。exposure findings は 6 時間ごとに作られるので、週 1 回の棚卸しには十分間に合います。ただし、対象のリソースの種類は限られていて、ALB は入っていません（2026 年 11 月時点）。
+
+- [Generating exposure findings - AWS Security Hub](https://docs.aws.amazon.com/securityhub/latest/userguide/exposure-findings-generate.html)
+- [Supported resource types for exposure findings in Security Hub](https://docs.aws.amazon.com/securityhub/latest/userguide/exposure-findings-supported-resources.html)
 
 ## 効果をどう測るか
 

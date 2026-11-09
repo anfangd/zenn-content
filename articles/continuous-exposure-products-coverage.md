@@ -88,6 +88,21 @@ exposure findings は 6 時間ごとに作られます。外から実際に届�
 - [AWS Security Hub adds impact analysis for exposure findings (2026)](https://aws.amazon.com/about-aws/whats-new/2026/07/impact-analysis-aws-security-hub/)
 - [Network Scanning in Security Hub](https://docs.aws.amazon.com/securityhub/latest/userguide/securityhub-v2-network-scanning.html)
 
+### Wiz と Security Hub を、比べる軸で並べる
+
+| 軸 | Wiz | Security Hub の exposure findings |
+|---|---|---|
+| 対象のクラウド | 主要なクラウドをまたいで見る | AWS。Azure はコネクターを使えば一部のリソースが対象 |
+| 証拠の種類 | 設定・IaC（コードやワークロードの中身も含む） | 設定（AWS のサービスのシグナル） |
+| 組み合わせの見方 | Security Graph で攻撃経路を出す | 攻撃経路のグラフと、影響の範囲を出す |
+| 外からの確かめ方 | dynamic scanner で外から接続する | Network Scanning で AWS の IP から接続する |
+| 独自のルール | Rego や AI で書ける | exposure findings 自体には足せない。Config のカスタムルールなど別の仕組みで補う |
+| 修正 | Green Agent が修正まで担う（一部はプレビュー） | MCP App は読み取り専用 |
+
+AWS だけで、まず組み合わせの露出を見たいなら Security Hub、複数のクラウドやコード・ワークロードの中までまとめて見たいなら Wiz のような CNAPP、という分かれ方になります。
+
+- [Supported resource types for exposure findings in Security Hub](https://docs.aws.amazon.com/securityhub/latest/userguide/exposure-findings-supported-resources.html)
+
 ## 見つけるだけでなく、直すところまでエージェントが担い始めている
 
 2026 年に入って、製品の側にもエージェントが入ってきました。
