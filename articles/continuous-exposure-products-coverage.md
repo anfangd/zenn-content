@@ -96,7 +96,7 @@ exposure findings は 6 時間ごとに作られます。外から実際に届�
 | 証拠の種類 | 設定・IaC（コードやワークロードの中身も含む） | 設定（AWS のサービスのシグナル） |
 | 組み合わせの見方 | Security Graph で攻撃経路を出す | 攻撃経路のグラフと、影響の範囲を出す |
 | 外からの確かめ方 | dynamic scanner で外から接続する | Network Scanning で AWS の IP から接続する |
-| 独自のルール | Rego や AI で書ける | exposure findings 自体には足せない。Config のカスタムルールなど別の仕組みで補う |
+| 独自のルール | Rego や AI で書ける | 独自の検査は Config のカスタムルールなどで足す（exposure findings の判定に直接足せるかは未確認） |
 | 修正 | Green Agent が修正まで担う（一部はプレビュー） | MCP App は読み取り専用 |
 
 AWS だけで、まず組み合わせの露出を見たいなら Security Hub、複数のクラウドやコード・ワークロードの中までまとめて見たいなら Wiz のような CNAPP、という分かれ方になります。
