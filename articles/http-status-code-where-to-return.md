@@ -22,6 +22,7 @@ published: false
 - メンテナンス中は `503` に `Retry-After` を付ける。`200` や `302` でメンテページを見せない
 - 返す層は、手前ほどアプリが止まっていても確実に返せ、奥ほど細かく判断できる。メンテナンスの切り替えは、止める対象より手前の層に置く
 - AWS なら WAF のカスタムレスポンスが扱いやすい。管理者の IP を条件から外せて、`Retry-After` も付けられる。ALB の固定レスポンスはヘッダーを付けられない
+- WAF の既定の 403 を変えるのは、相手に別の動きをしてほしいときだけにする。攻撃の遮断に 503 を使うとリトライを招く。逆に 403 のままだと、CloudFront のカスタムエラーページで 200 に化けることがある
 - ユーザー向けと管理者向けでホスト名やパスが分かれていると、「利用者向けだけ止めて、管理者は動作確認する」が条件 1 つで書ける
 - WebSocket は接続済みのコネクションがメンテを素通りする。サーバーから close code を付けて閉じ、クライアントはジッター付きでつなぎ直す
 
@@ -179,6 +180,51 @@ resource "aws_wafv2_web_acl" "main" {
 
 WAF がない構成で ALB を使う場合は、リスナールールを 2 本にします。優先度の高いほうに「送信元 IP が管理者なら forward」、次に「それ以外は fixed-response で 503」を置きます。ただし、前の節のとおり `Retry-After` は付けられません。
 
+## WAF の既定の 403 を変えるなら、理由と影響を先に決める
+
+WAF の Block は、何も設定しなければ `403 Forbidden` を返します。カスタムレスポンスを使えば 2xx から 5xx まで決められたコードに変えられますが、変えると受け取る側の動きも変わります。
+
+### 変える理由があるのは、相手に別の動きをしてほしいときだけ
+
+| 場面 | 変える先 | 相手にしてほしいこと |
+| --- | --- | --- |
+| メンテナンス | `503` と `Retry-After` | クローラーにはインデックスを残してもらう。監視には「一時的」と伝える |
+| レート制限 | `429` と `Retry-After` | クライアントに、間隔を空ければ通ると伝える |
+| 管理画面を隠す | `404` | ボットに、管理画面があること自体を教えない |
+| 地域制限などで案内ページを見せる | `302` と `Location` | 403 の画面ではなく、理由を説明するページに移ってもらう |
+
+逆に、マネージドルールなどで攻撃をはじく Block は、403 のままにしておきます。
+
+### 503 と 429 は「待てば通る」という合図になる
+
+多くの HTTP クライアントや SDK は、5xx や 429 を受けると自動でリトライします。攻撃や不正なリクエストをはじくルールで 503 を返すと、ボットやクライアントに「もう一度来て」と伝えることになり、リクエストがかえって増えます。503 と 429 は、本当に待てば通る場面だけに使います。
+
+### 2xx は返さない
+
+WAF は 200 も返せますが、ブロックしたのに 200 を返すと、クローラーにはブロック画面が正規の中身として、監視には正常として伝わります。メンテページを 200 で出すのと同じ問題が起きます。
+
+### ステータスコードだけでは、WAF が返したのか区別できなくなる
+
+CloudFront や ALB のアクセスログには、WAF で設定したコードがそのまま残ります。「403 なら WAF」という前提のダッシュボードやアラームは、コードを変えると数え方がずれます。WAF が返した 503 で、5xx のアラームが鳴ることもあります。
+
+区別するには、WAF のログの `terminatingRuleId` で、どのルールが返したかを見ます。メンテナンスのように見られて困らない場面なら、カスタムレスポンスに `x-maintenance: true` のような独自ヘッダーを付けておくと、ログやブラウザの開発者ツールでもすぐ見分けられます。
+
+### 404 で隠すと、正規の利用者も迷う
+
+VPN を切ったまま管理画面を開いた管理者にも 404 が返ります。URL を間違えたと思って探し回ったり、問い合わせを受けた側が本当にページがないのかブロックなのか切り分けられなかったりします。404 で隠すのは管理画面のパスに絞り、管理者には「社内ネットワーク以外からは 404 になる」と伝えておきます。
+
+### 既定の 403 のままだと、CloudFront のカスタムエラーページに置き換わる
+
+WAF がブロックしたときのレスポンスは、次の順で決まります。
+
+1. WAF の Block にカスタムレスポンスがあれば、それを返す。CloudFront 側の設定は効かない
+2. なければ、CloudFront のカスタムエラーページなど、保護しているリソース側の設定が効く
+3. どちらもなければ、WAF の既定の 403 を返す
+
+SPA でよくある「403 と 404 を `/index.html` と 200 に差し替える」カスタムエラーページを設定していると、2 番目が効きます。WAF がブロックしたリクエストまで `index.html` と 200 になり、ブロックされたことが外から見えなくなります。SPA の配信で WAF を使うなら、Block するルールそれぞれに 403 のカスタムレスポンスを明示しておくと、この差し替えを避けられます。
+
+逆に、カスタムレスポンスを設定したルールでは、CloudFront のカスタムエラーページは効きません。メンテページの HTML は、CloudFront ではなく WAF のカスタムレスポンスのボディに持たせます。なお、`content-type` はヘッダーとしては指定できないので、ボディの種類（`TEXT_HTML`、`APPLICATION_JSON` など）で決めます。
+
 ## ユーザー向けと管理者向けでエンドポイントを分けておくと、止め方を選べる
 
 あなたのシステムでは、利用者向けと管理者向けの入口はどう分かれていますか？ ホスト名（`www.example.com` と `admin.example.com`）やパス（`/admin`）で分かれていれば、メンテナンスの範囲を条件 1 つで選べます。同じ URL で権限だけが違う作りだと、手前の層からは区別できず、アプリで切り替えるしかなくなります。
@@ -233,7 +279,7 @@ HTTPS への移行は 301 か 308 に加えて `Strict-Transport-Security`（HST
 | `201 Created` | 作成した。`Location` で作ったリソースの URL を返す |
 | `204 No Content` | 成功したが返すボディがない |
 
-WAF のレートベースルールは、既定のままだと 403 を返します。API なら、カスタムレスポンスで 429 と `Retry-After` に変えておくと、クライアントが「拒否された」のか「待てばいい」のかを区別できます。
+WAF のレートベースルールは、既定のままだと 403 を返します。API なら、カスタムレスポンスで 429 と `Retry-After` に変えておくと、クライアントが「拒否された」のか「待てばいい」のかを区別できます（変えるときの注意は「WAF の既定の 403 を変えるなら」の節で書きました）。
 
 エラーのボディは、RFC 9457（Problem Details、`application/problem+json`）の形にそろえておくと、クライアントが共通の処理で扱えます。
 
@@ -318,6 +364,7 @@ WAF や ALB でメンテナンスに切り替えても、それは新しいリ�
 - WAF のカスタムレスポンスで、503 と `Retry-After` が CloudFront 経由でそのまま返るか
 - 記事中の Terraform で、`maintenance` を切り替えたときに想定どおり 503 になり、管理者の IP からは通常どおり通るか
 - WAF が返した 503 が、CloudFront の Error Caching Minimum TTL の影響を受けるか
+- 403 を `/index.html` と 200 に差し替えるカスタムエラーページがあるとき、WAF の既定の 403 が 200 に変わり、カスタムレスポンスを付けると 403 のまま返るか
 
 【ハジメが書く：試した結果と感想（検証したら）】
 
@@ -348,6 +395,7 @@ WAF をどこに置くか、オリジンをどう閉じるかは、前に書い�
 - [CloseEvent: code property - MDN](https://developer.mozilla.org/docs/Web/API/CloseEvent/code)
 - [ウェブサイトを一時停止または無効にする - Google 検索セントラル](https://developers.google.com/search/docs/crawling-indexing/pause-online-business?hl=ja)
 - [Sending custom responses for Block actions - AWS WAF](https://docs.aws.amazon.com/waf/latest/developerguide/customizing-the-response-for-blocked-requests.html)
+- [Supported status codes for custom responses - AWS WAF](https://docs.aws.amazon.com/waf/latest/developerguide/customizing-the-response-status-codes.html)
 - [Action types for listener rules - Elastic Load Balancing](https://docs.aws.amazon.com/elasticloadbalancing/latest/application/rule-action-types.html)
 - [AWS::ElasticLoadBalancingV2::ListenerRule FixedResponseConfig - AWS CloudFormation](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-properties-elasticloadbalancingv2-listenerrule-fixedresponseconfig.html)
 - [How do I send custom HTTP responses from my Application Load Balancer? - AWS re:Post](https://repost.aws/knowledge-center/elb-send-custom-http-responses-from-alb)
