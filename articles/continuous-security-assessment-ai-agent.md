@@ -9,7 +9,7 @@ published: true
 :::message
 この記事は、Claude と一緒に公開されているフレームワークや AWS のドキュメントを調べ、整理した内容をまとめたものです。各記述の根拠は、記事中のリンク先で確認できます。
 
-2026年11月に、同じ課題に向き合っている製品についての短い節（「製品も同じ方向に動いている」）を追記しました。
+2026 年 11 月に、同じ課題に向き合っている製品についての短い節（「製品も同じ方向に動いている」）を追記しました。
 :::
 
 ## はじめに
@@ -30,7 +30,7 @@ published: true
 - システムのチェックは、**システムのセキュリティ基準**、**リリース前のレビュー**、**定期的なアセスメント**の 3 つでできていることが多いです。弱いのは、リリース後から次のアセスメントまでの「見えない期間」です
 - 項目を「**何を証拠に判断するか**」（設定・文書・運用の実態）で分けると、自動化できる範囲と頻度が決まります
 - **決定的なルール**は変更のたびに、**AI エージェント**は定期的に回します。エージェントが見つけた新しいパターンは、ルールに落とします
-- Wiz などの CNAPP や Security Hub の exposure findings も設定の組み合わせを見ますが、文書と運用の実態は対象外です
+- Wiz などの CNAPP（クラウドの設定や脆弱性をまとめて見る製品）や Security Hub の exposure findings も設定の組み合わせを見ますが、文書と運用の実態は対象外です
 - エージェントは読み取り専用にし、最終判断は人がします
 
 ## 一般的にはどうなっているのか
@@ -40,8 +40,6 @@ published: true
 ![セキュリティのチェックはどこで行われているか](/images/continuous-security-assessment-ai-agent/assessment-gates.png)
 
 ### 何を守るかは、全社の基準とシステムの基準の 2 段で決める
-
-では、レビューやアセスメントで照らし合わせる基準は、どこにあるのでしょうか。
 
 あなたの組織には、情報セキュリティの基本方針と、その下で「何を、どのレベルで求めるか」を具体的に決めた基準がありますか？ あるとしたら、それは業務端末の使い方からシステムの設定までを 1 つにまとめたものですか？ それとも、システム向けの基準が別にありますか？
 
@@ -192,7 +190,7 @@ https://zenn.dev/anfangd/articles/cloudfront-alb-origin-exposure-audit
 
 ### 製品も同じ方向に動いている
 
-組み合わせの穴を見つけるのは、製品の側でも取り組まれています。CNAPP と呼ばれる製品（Wiz など）や AWS Security Hub の exposure findings は、設定・権限・ネットワーク・脆弱性をつなげて、攻撃経路として見せます。ただし、製品が見るのは設定の組み合わせまでです。設計書や体制表といった文書と、運用の実態は対象外なので、ここはエージェントと人の仕事として残ります。製品がどこまで見てくれるかは、別の記事にまとめました。
+組み合わせの穴を見つけるのは、製品の側でも取り組まれています。CNAPP と呼ばれる製品（Wiz など）や AWS Security Hub の exposure findings は、設定・権限・ネットワーク・脆弱性をつなげて、攻撃経路として見せます。ただし、CNAPP や exposure findings が見るのは設定の組み合わせまでです。設計書や体制表といった文書と、運用の実態は対象外なので、ここはエージェントと人の仕事として残ります。製品がどこまで見てくれるかは、別の記事にまとめました。
 
 https://zenn.dev/anfangd/articles/continuous-exposure-products-coverage
 
@@ -275,9 +273,10 @@ https://zenn.dev/anfangd/articles/cloudfront-alb-origin-exposure-audit
 3. **報告のフォーマットとトリアージの流れを固める**：ここが決まってから対象を広げる
 4. **証拠の種類の表を育てる**：対象を広げるたびに、項目と証拠の出どころを表に足していく
 
-AWS が中心なら、Security Hub を有効にし、exposure findings をエージェントの入力にするところから始めるのが手軽です。exposure findings は 6 時間ごとに作られるので、週 1 回の棚卸しには十分間に合います。ただし、対象のリソースの種類は限られていて、ALB は入っていません（2026 年 11 月時点）。
+AWS が中心なら、Security Hub を有効にし、exposure findings をエージェントの入力にするところから始めるのが手軽です。exposure findings は新しいシグナルが入るたびにほぼリアルタイムで更新されるので、週 1 回の棚卸しでも最新の状態を読めます。ただし、主な対象になるリソースの種類は限られていて、ALB は入っていません（2026 年 11 月時点）。
 
 - [Generating exposure findings - AWS Security Hub](https://docs.aws.amazon.com/securityhub/latest/userguide/exposure-findings-generate.html)
+- [AWS Security Hub now generally available with near real-time risk analytics (2025)](https://aws.amazon.com/about-aws/whats-new/2025/12/security-hub-near-real-time-risk-analytics)
 - [Supported resource types for exposure findings in Security Hub](https://docs.aws.amazon.com/securityhub/latest/userguide/exposure-findings-supported-resources.html)
 
 ## 効果をどう測るか

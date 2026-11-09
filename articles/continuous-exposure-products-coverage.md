@@ -18,9 +18,9 @@ https://zenn.dev/anfangd/articles/continuous-security-assessment-ai-agent
 
 ## TL;DR
 
-- 「年 1 回の点検を継続的なサイクルにする」流れは、枠組み（Gartner の CTEM）、製品（CNAPP、AWS Security Hub の exposure findings）、監査（FedRAMP）のどれでも進んでいます
+- 「年 1 回の点検を継続的なサイクルにする」流れは、枠組み（Gartner の CTEM：継続的な脅威エクスポージャー管理）、製品（CNAPP、AWS Security Hub の exposure findings）、監査（FedRAMP）のどれでも進んでいます
 - CNAPP の強みは、設定・権限・ネットワーク・脆弱性を 1 つのグラフに載せて、**組み合わせを攻撃経路として**見せることです。2026 年には、修正まで担うエージェントも出てきました
-- 製品が見るのは**設定の組み合わせ**までです。設計書や体制表といった**文書**と、**運用の実態**は対象外です
+- CNAPP や exposure findings が見るのは**設定の組み合わせ**までです。設計書や体制表といった**文書**と、**運用の実態**は対象外です
 - 設定の中でも、対象のリソースや見方によっては拾えない穴があります。気づいた穴をルールに落とすのは、製品を入れても人とエージェントの仕事として残ります
 
 ## 年 1 回の点検を、継続的なサイクルにする動きはあちこちで進んでいる
@@ -29,14 +29,17 @@ https://zenn.dev/anfangd/articles/continuous-security-assessment-ai-agent
 
 Gartner は、**継続的な脅威エクスポージャー管理（CTEM）** という考え方を打ち出しています。デジタルと物理の資産について、届くか・露出しているか・悪用できるかを継続的に評価する、体系的なアプローチです。範囲をインフラの部品ではなく、攻撃の経路や事業のプロジェクトに合わせて決めるのが特徴です。
 
-CTEM は、範囲の決定（scoping）・発見（discovery）・優先順位付け（prioritization）・検証（validation）・対応の実行（mobilization）の 5 段階を繰り返すサイクルとして説明されます。製品ではなくプログラムの枠組みで、それを支える製品の分類として、Gartner は **Exposure Assessment Platforms（EAP）** を置いています。
+CTEM は、範囲の決定（scoping）・発見（discovery）・優先順位付け（prioritization）・検証（validation）・対応の実行（mobilization）の 5 段階を繰り返すサイクルとして説明されます。製品ではなくプログラムの枠組みです。関連する製品の分類として、Gartner は露出を継続的に見つけて優先順位を付ける **Exposure Assessment Platforms（EAP）** を評価しています。
 
 - [Gartner Identifies the Top Cybersecurity Trends for 2024](https://www.gartner.com/en/newsroom/press-releases/2024-02-22-gartner-identifies-top-cybersecurity-trends-for-2024)
+- [How to Manage Cybersecurity Threats, Not Episodes - Gartner](https://www.gartner.com/en/articles/how-to-manage-cybersecurity-threats-not-episodes)
 - [Exposure Assessment Platforms Reviews and Ratings - Gartner](https://www.gartner.com/reviews/market/exposure-assessment-platforms)
 
-### 監査の側も、証拠を機械で読める形で継続的に出す方向に動いている
+### 監査の側も、継続的に報告する方向に動いている
 
-米国政府のクラウド認証制度 FedRAMP は、2026 年 6 月に公開した Consolidated Rules for 2026 で、認証後も 3 か月ごとに継続的なモニタリングの報告を出すよう求めています。報告や証拠はできるだけ機械で読める形で受け取る方針で、その形式として NIST の OSCAL を指定しています。
+米国政府のクラウド認証制度 FedRAMP は、2026 年 6 月に公開した Consolidated Rules for 2026 で、認証後も 3 か月ごとに継続的なモニタリングの報告を出すよう求めています。その根拠になっている米国行政管理予算局（OMB）の通達 M-24-15 は、証拠をできるだけ機械で読める形で受け取ることを求め、形式として NIST の OSCAL を挙げています。
+
+### 検出結果の形式も、共通のスキーマにそろいつつある
 
 検出結果の形式では、**OCSF（Open Cybersecurity Schema Framework）** が広がっています。ベンダーに依存しない、セキュリティのイベントと検出結果のスキーマです。Security Hub の検出結果も OCSF で出力されます。
 
@@ -63,7 +66,7 @@ CTEM は、範囲の決定（scoping）・発見（discovery）・優先順位�
 | セキュリティグラフ | リソース・ID・権限・ネットワーク経路・脆弱性を 1 つのグラフに載せ、重要な資産に届く**攻撃経路**を探す。低リスクの問題が連鎖して高リスクになる組み合わせ（toxic combination）を挙げる | グラフに載るのは、製品が読める設定やログだけ |
 | ランタイムのセンサー | eBPF などで稼働中のワークロードの動きを取り、グラフ上の経路が本当に悪用できるかを確かめる | エージェントを入れる手間がかかる |
 
-代表的なのが Wiz で、Security Graph を中心に据えています。ほかに、Palo Alto Networks の Cortex Cloud（旧 Prisma Cloud）、Microsoft Defender for Cloud、CrowdStrike Falcon Cloud Security、エージェントレスのスキャンの先駆けである Orca Security などがあります。
+代表的なのが Wiz で、Security Graph を中心に据えています。ほかに、Palo Alto Networks の Cortex Cloud（旧 Prisma Cloud）、Microsoft Defender for Cloud、CrowdStrike Falcon Cloud Security、SideScanning という方式でエージェントレスのスキャンを打ち出している Orca Security などがあります。
 
 - [What is attack path analysis? - Wiz](https://www.wiz.io/academy/detection-and-response/attack-path-analysis)
 - [Orca SideScanning - Orca Security](https://orca.security/platform/agentless-sidescanning-technology/)
@@ -81,10 +84,11 @@ Wiz は、ロードバランサー、ファイアウォール、VPC、サブネ�
 
 AWS にも近い機能があります。**Security Hub の exposure findings** は、Security Hub CSPM、Inspector、GuardDuty、Macie などのシグナルを関連付けて、1 つの「露出」として出します。攻撃経路のグラフも見られます。2026 年 7 月には、侵害されたときに届く範囲と、各段階の権限を示す影響分析も加わりました。
 
-exposure findings は 6 時間ごとに作られます。外から実際に届くかは、Network Scanning が AWS の IP アドレスから調べます。
+exposure findings は、新しいシグナルが入るたびにほぼリアルタイムで更新されます。外から実際に届くかは、オプトインで有効にする外部スキャンの機能 Network Scanning が、AWS の IP アドレスから接続して調べます（約 12 時間ごとに再スキャン）。
 
 - [Exposure findings in Security Hub - AWS Security Hub](https://docs.aws.amazon.com/securityhub/latest/userguide/exposure-findings.html)
 - [Generating exposure findings - AWS Security Hub](https://docs.aws.amazon.com/securityhub/latest/userguide/exposure-findings-generate.html)
+- [AWS Security Hub now generally available with near real-time risk analytics (2025)](https://aws.amazon.com/about-aws/whats-new/2025/12/security-hub-near-real-time-risk-analytics)
 - [AWS Security Hub adds impact analysis for exposure findings (2026)](https://aws.amazon.com/about-aws/whats-new/2026/07/impact-analysis-aws-security-hub/)
 - [Network Scanning in Security Hub](https://docs.aws.amazon.com/securityhub/latest/userguide/securityhub-v2-network-scanning.html)
 
@@ -93,11 +97,11 @@ exposure findings は 6 時間ごとに作られます。外から実際に届�
 | 軸 | Wiz | Security Hub の exposure findings |
 |---|---|---|
 | 対象のクラウド | 主要なクラウドをまたいで見る | AWS。Azure はコネクターを使えば一部のリソースが対象 |
-| 証拠の種類 | 設定・IaC（コードやワークロードの中身も含む） | 設定（AWS のサービスのシグナル） |
+| 証拠の種類 | 設定・IaC（コードやワークロードの中身も含む） | 設定に加え、Inspector の脆弱性（パッケージ、コンテナイメージ、Lambda のコード）、GuardDuty の脅威、Macie の機密データ |
 | 組み合わせの見方 | Security Graph で攻撃経路を出す | 攻撃経路のグラフと、影響の範囲を出す |
-| 外からの確かめ方 | dynamic scanner で外から接続する | Network Scanning で AWS の IP から接続する |
+| 外からの確かめ方 | dynamic scanner で外から接続する | Network Scanning（オプトイン）で AWS の IP から接続する |
 | 独自のルール | Rego や AI で書ける | 独自の検査は Config のカスタムルールなどで足す（exposure findings の判定に直接足せるかは未確認） |
-| 修正 | Green Agent が修正まで担う（一部はプレビュー） | MCP App は読み取り専用 |
+| 修正 | Green Agent が修正を提案し、実行まで担う（プレビュー） | 修正の手順を示す。MCP App も修正の推奨を返す（実行はしない） |
 
 AWS だけで、まず組み合わせの露出を見たいなら Security Hub、複数のクラウドやコード・ワークロードの中までまとめて見たいなら Wiz のような CNAPP、という分かれ方になります。
 
@@ -107,13 +111,13 @@ AWS だけで、まず組み合わせの露出を見たいなら Security Hub、
 
 2026 年に入って、製品の側にもエージェントが入ってきました。
 
-- **Wiz**：3 つの AI エージェントを出しています。Red Agent は悪用できるリスクを探して確かめ、Blue Agent は脅威の調査を早め、Green Agent はリスクを調べて修正を提案・実行します。Claude Code や Cursor 向けのスキルも用意し、コーディングエージェントが Security Graph の検出結果を取り込んで、コードを直せるようにしています
+- **Wiz**：3 つの AI エージェントを出しています。Red Agent は悪用できるリスクを探して確かめ、Blue Agent は脅威の調査を早め、Green Agent はリスクを調べて修正を提案・実行します（Green Agent はプレビュー）。Claude Code や Cursor 向けのスキルも用意し、コーディングエージェントが Security Graph の検出結果を取り込んで、コードを直せるようにしています
 - **AWS**：Security Hub MCP App をプレビューで出しています。Claude Desktop から、exposure findings の攻撃経路や関連する検出結果を調べられます。ツールはすべて読み取り専用です
 
 修正の実行まで任せるかどうかは、組織ごとに決めることになります。Gartner は、AI には大量の分析やトリアージを任せ、重要な判断の権限は人が持つ「human-on-the-loop」の形を勧めています。
 
 - [Wiz at Black Hat 2026: Driving AI Threat Readiness](https://www.wiz.io/blog/wiz-at-black-hat-2026)
-- [Next '26: Redefining security for the AI era with Google Cloud and Wiz](https://cloud.google.com/blog/products/identity-security/next26-redefining-security-for-the-ai-era-with-google-cloud-and-wiz)
+- [Wiz at Google Cloud Next 2026](https://wiz.io/blog/wiz-at-google-cloud-next)
 - [AWS Security Hub MCP App brings exposure findings into your AI-assisted workflow (Preview)](https://aws.amazon.com/about-aws/whats-new/2026/07/aws-security-hub-mcp-app/)
 - [When Reactive Security Falls Behind AI-Driven Threats - Gartner](https://www.gartner.com/en/articles/preemptive-cybersecurity-solutions)
 
@@ -127,20 +131,22 @@ AWS だけで、まず組み合わせの露出を見たいなら Security Hub、
 | 文書 | 対象外 | 設計書や体制表と、実際の構成とのずれを確かめる |
 | 運用の実態 | 対象外 | 記録（チケット、ログ）と、人へのヒアリングで確かめる |
 
-製品を入れても、文書と運用の実態を確かめる仕事はそのまま残ります。前の記事で、AI エージェントにこの部分を担わせることを考えたのはそのためです。
+CNAPP や exposure findings を入れても、文書と運用の実態を確かめる仕事は残ります。前の記事で、AI エージェントにこの部分を担わせることを考えたのはそのためです。なお、AWS Security Agent のように、設計書を組織のセキュリティ要件と照らしてレビューする製品も出始めています。
+
+- [How AWS Security Agent works](https://docs.aws.amazon.com/securityagent/latest/userguide/how-it-works.html)
 
 ## 設定の中にも、製品から見えにくい穴がある
 
-設定の列でも、すべてが拾えるとは限りません。例として、前の記事で扱った「CloudFront の裏の ALB」を考えます。ALB の SG が CloudFront のマネージドプレフィックスリストだけを許可していて、リスナーにヘッダー条件がない構成です。このプレフィックスリストは世界中の CloudFront を通すので、他人の CloudFront を経由すれば ALB に直接届きます。
+設定の列でも、すべてが拾えるとは限りません。例として、前の記事で扱った「CloudFront の裏の ALB」を考えます。ALB のセキュリティグループ（SG）が CloudFront のマネージドプレフィックスリストだけを許可していて、リスナーにヘッダー条件がない構成です。このプレフィックスリストは世界中の CloudFront を通すので、他人の CloudFront を経由すれば、自分の CloudFront を通らずに ALB に届きます。
 
 https://zenn.dev/anfangd/articles/cloudfront-alb-origin-exposure-audit
 
 この穴は、製品から次の理由で見えにくいと考えられます（どちらも試していません）。
 
-- **対象のリソース**：Security Hub の exposure findings が対象にするリソースの種類（2026 年 11 月時点）には、EC2、Lambda、S3 などはありますが、ALB は入っていません
-- **外からの確かめ方**：Wiz の dynamic scanner も Security Hub の Network Scanning も、外から実際に接続して確かめます。ただ、接続元は CloudFront ではないので SG で弾かれ、「届かない」と判定されそうです。設定からの計算でも、プレフィックスリストが「他人の CloudFront も通す」ことまでモデル化しているかは、公開情報からは分かりませんでした
+- **対象のリソース**：Security Hub の exposure findings が主な対象にするリソースの種類（2026 年 11 月時点）には、EC2、Lambda、S3 などはありますが、ALB 自体は入っていません。裏の EC2 や ECS の露出として、ALB を通る経路が評価される可能性はあります
+- **外からの確かめ方**：Wiz の dynamic scanner も Security Hub の Network Scanning も、外から実際に接続して確かめます。Network Scanning は ALB も対象にしますが、接続元は AWS の IP で、CloudFront のプレフィックスリストには入っていません。SG で弾かれ、「届かない」と判定されそうです。設定からの計算でも、プレフィックスリストが「他人の CloudFront も通す」ことまでモデル化しているかは、公開情報からは分かりませんでした
 
-一方で、Wiz なら Rego で独自のルールを書けます。「SG が CloudFront のプレフィックスリストを許可しているのに、リスナーにヘッダー条件がない ALB」を検出するルールは作れるはずです。
+一方で、「SG が CloudFront のプレフィックスリストを許可しているのに、リスナーにヘッダー条件がない ALB」を検出するルールは、自分で書けます。Wiz なら Rego で、AWS だけなら Config のカスタムルールで書けるはずです。
 
 つまり、製品を入れても、**新しい穴に気づいてルールに落とす**ところは残ります。製品が出す検出結果は、それを考えるための入力の 1 つです。
 
